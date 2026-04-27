@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ТеплоВместе — админка записи</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Literata:opsz,wght@7..72,600;7..72,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <div>
+          <p class="eyebrow">ТеплоВместе</p>
+          <h1>Админка онлайн-записи</h1>
+        </div>
+        <a class="admin-link" href="./">К странице записи</a>
+      </header>
+
+      <main class="admin-layout">
+        <section class="panel panel-soft">
+          <div class="section-heading">
+            <p class="eyebrow">Слоты</p>
+            <h2>Создать слот</h2>
+          </div>
+          <div class="feedback hidden" id="slot-form-feedback"></div>
+          <form class="admin-form" id="slot-form">
+            <label>
+              <span>Психолог</span>
+              <select name="psychologist_id" required></select>
+            </label>
+            <label>
+              <span>Дата и время по Москве</span>
+              <input name="starts_at_local" type="datetime-local" required />
+            </label>
+            <button class="button-primary" type="submit">Создать слот</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="toolbar">
+            <div class="section-heading">
+              <p class="eyebrow">Заявки</p>
+              <h2>Список заявок</h2>
+            </div>
+            <form class="filters" id="booking-filters">
+              <input name="date" type="date" />
+              <select name="psychologist_id"></select>
+              <select name="status"></select>
+              <button class="button-secondary" type="submit">Фильтровать</button>
+            </form>
+          </div>
+          <div class="feedback hidden" id="bookings-feedback"></div>
+          <div class="table-card" id="bookings-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="toolbar">
+            <div class="section-heading">
+              <p class="eyebrow">Слоты</p>
+              <h2>Список слотов</h2>
+            </div>
+            <form class="filters" id="slot-filters">
+              <input name="date" type="date" />
+              <select name="psychologist_id"></select>
+              <select name="status"></select>
+              <button class="button-secondary" type="submit">Фильтровать</button>
+            </form>
+          </div>
+          <div class="feedback hidden" id="slots-feedback"></div>
+          <div class="table-card" id="slots-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./admin.js" type="module"></script>
+  </body>
+</html>

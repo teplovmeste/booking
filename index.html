@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ТеплоВместе — онлайн-запись</title>
+    <meta
+      name="description"
+      content="Онлайн-запись на консультацию в проекте ТеплоВместе."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Literata:opsz,wght@7..72,600;7..72,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <div>
+          <p class="eyebrow">ТеплоВместе</p>
+          <h1>Онлайн-запись на консультацию</h1>
+        </div>
+        <a class="admin-link" href="./admin">Внутренняя админка</a>
+      </header>
+
+      <main class="booking-layout">
+        <section class="panel panel-soft">
+          <div class="section-heading">
+            <p class="eyebrow">Шаг 1</p>
+            <h2>Выберите возрастную категорию</h2>
+            <p class="section-text">
+              Покажем только тех психологов, которые работают с нужной возрастной группой, и
+              только доступные слоты в часовом поясе Москвы.
+            </p>
+          </div>
+          <div class="category-grid" id="category-grid"></div>
+          <p class="empty-state hidden" id="category-empty">
+            Для этой категории пока нет доступных слотов.
+          </p>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Шаг 2</p>
+            <h2>Выберите психолога и слот</h2>
+          </div>
+          <div class="psychologists-list" id="psychologists-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Шаг 3</p>
+            <h2>Заполните форму</h2>
+            <p class="section-text" id="selected-slot-summary">
+              Сначала выберите слот, после этого откроется форма заявки.
+            </p>
+          </div>
+
+          <div class="feedback hidden" id="form-feedback"></div>
+
+          <form id="booking-form" class="booking-form hidden" novalidate>
+            <div class="form-grid">
+              <label>
+                <span>Имя родителя</span>
+                <input name="parent_name" type="text" required />
+              </label>
+              <label>
+                <span>Email</span>
+                <input name="parent_email" type="email" required />
+              </label>
+              <label>
+                <span>Телефон</span>
+                <input name="parent_phone" type="text" required />
+              </label>
+              <label>
+                <span>Telegram</span>
+                <input name="parent_telegram" type="text" required />
+              </label>
+              <label>
+                <span>Имя ребенка</span>
+                <input name="child_name" type="text" required />
+              </label>
+              <label>
+                <span>Возраст ребенка</span>
+                <input name="child_age" type="number" min="1" max="18" step="1" required />
+              </label>
+              <label>
+                <span>Страна</span>
+                <input name="country" type="text" required />
+              </label>
+              <label>
+                <span>Предпочтительный способ связи</span>
+                <input name="preferred_contact_method" type="text" required />
+              </label>
+            </div>
+
+            <label class="form-full">
+              <span>Краткий запрос</span>
+              <textarea name="request_text" rows="5" required></textarea>
+            </label>
+
+            <input name="slot_id" type="hidden" />
+            <input name="age_category" type="hidden" />
+
+            <button class="button-primary" type="submit">Отправить заявку</button>
+          </form>
+
+          <div class="success-card hidden" id="success-card">
+            <p class="eyebrow">Готово</p>
+            <p id="success-message"></p>
+            <p class="success-note hidden" id="success-warning"></p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
