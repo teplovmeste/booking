@@ -23,7 +23,6 @@
           <p class="eyebrow">ТеплоВместе</p>
           <h1>Онлайн-запись на консультацию</h1>
         </div>
-        <a class="admin-link" href="./admin">Внутренняя админка</a>
       </header>
 
       <main class="booking-layout">
@@ -85,7 +84,7 @@
               </label>
               <label>
                 <span>Возраст ребенка</span>
-                <input name="child_age" type="number" min="1" max="18" step="1" required />
+                <input name="child_age" type="text" maxlength="120" required />
               </label>
               <label>
                 <span>Страна</span>
@@ -93,7 +92,7 @@
               </label>
               <label>
                 <span>Предпочтительный способ связи</span>
-                <input name="preferred_contact_method" type="text" required />
+                <select name="preferred_contact_method" required></select>
               </label>
             </div>
 

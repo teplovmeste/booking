@@ -20,6 +20,7 @@ const SQLITE_SCHEMA_SQL = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     age_category TEXT NOT NULL,
+    age_categories TEXT,
     email TEXT NOT NULL,
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
@@ -48,7 +49,7 @@ const SQLITE_SCHEMA_SQL = `
     parent_phone TEXT NOT NULL,
     parent_telegram TEXT NOT NULL,
     child_name TEXT NOT NULL,
-    child_age INTEGER NOT NULL,
+    child_age TEXT NOT NULL,
     country TEXT NOT NULL,
     request_text TEXT NOT NULL,
     preferred_contact_method TEXT NOT NULL,
@@ -72,6 +73,7 @@ export const POSTGRES_SCHEMA_SQL = `
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     age_category TEXT NOT NULL,
+    age_categories TEXT,
     email TEXT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL,
@@ -100,7 +102,7 @@ export const POSTGRES_SCHEMA_SQL = `
     parent_phone TEXT NOT NULL,
     parent_telegram TEXT NOT NULL,
     child_name TEXT NOT NULL,
-    child_age INTEGER NOT NULL,
+    child_age TEXT NOT NULL,
     country TEXT NOT NULL,
     request_text TEXT NOT NULL,
     preferred_contact_method TEXT NOT NULL,
@@ -120,11 +122,54 @@ export const POSTGRES_SCHEMA_SQL = `
 `;
 
 const DEMO_PSYCHOLOGISTS = [
-  ["Анна Тихонова", "preschool", "anna@teplovmeste.com"],
-  ["Мария Ларионова", "primary_school", "maria@teplovmeste.com"],
-  ["Елизавета Орлова", "teens", "elizaveta@teplovmeste.com"],
-  ["Дарья Соболева", "teens", "daria@teplovmeste.com"]
+  { name: "Анна Тихонова", age_categories: ["preschool"], email: "anna@teplovmeste.com" },
+  { name: "Мария Ларионова", age_categories: ["primary_school"], email: "maria@teplovmeste.com" },
+  { name: "Елизавета Орлова", age_categories: ["teens"], email: "elizaveta@teplovmeste.com" },
+  { name: "Дарья Соболева", age_categories: ["primary_school", "teens"], email: "daria@teplovmeste.com" }
 ];
+
+function serializeAgeCategories(ageCategories, fallbackAgeCategory = "") {
+  const values = [...new Set((Array.isArray(ageCategories) ? ageCategories : []).map((value) => String(value || "").trim()).filter(Boolean))];
+  if (values.length > 0) {
+    return JSON.stringify(values);
+  }
+
+  return fallbackAgeCategory ? JSON.stringify([fallbackAgeCategory]) : JSON.stringify([]);
+}
+
+function parseAgeCategories(rawValue, fallbackAgeCategory = "") {
+  if (Array.isArray(rawValue)) {
+    return rawValue;
+  }
+
+  if (typeof rawValue === "string" && rawValue.trim()) {
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (Array.isArray(parsed)) {
+        return parsed.map((value) => String(value || "").trim()).filter(Boolean);
+      }
+    } catch {
+      // noop
+    }
+  }
+
+  return fallbackAgeCategory ? [fallbackAgeCategory] : [];
+}
+
+function hydratePsychologistRow(row) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    age_categories: parseAgeCategories(row.age_categories, row.age_category)
+  };
+}
+
+function hydrateRows(rows, transform = normalizeRow) {
+  return rows.map((row) => hydratePsychologistRow(transform(row)));
+}
 
 function buildDemoSlots(psychologists, nowProvider) {
   const baseDate = nowProvider();
@@ -223,6 +268,7 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
       s.*,
       p.name AS psychologist_name,
       p.age_category,
+      p.age_categories,
       p.email AS psychologist_email,
       p.is_active
     FROM slots s
@@ -243,6 +289,25 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
     LEFT JOIN slots s ON s.id = b.slot_id
   `;
 
+  function ensureSqlitePsychologistCategoryStorage() {
+    const columns = db.prepare("PRAGMA table_info(psychologists)").all();
+    const hasAgeCategoriesColumn = columns.some((column) => column.name === "age_categories");
+
+    if (!hasAgeCategoriesColumn) {
+      db.exec("ALTER TABLE psychologists ADD COLUMN age_categories TEXT");
+    }
+
+    const rows = db.prepare("SELECT id, age_category, age_categories FROM psychologists").all();
+    const update = db.prepare("UPDATE psychologists SET age_categories = ? WHERE id = ?");
+
+    for (const row of rows) {
+      const serialized = serializeAgeCategories(parseAgeCategories(row.age_categories, row.age_category), row.age_category);
+      if (serialized !== row.age_categories) {
+        update.run(serialized, Number(row.id));
+      }
+    }
+  }
+
   function countRows(tableName) {
     return Number(db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get().count);
   }
@@ -254,12 +319,19 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
 
     const timestamp = nowProvider().toISOString();
     const insertPsychologist = db.prepare(`
-      INSERT INTO psychologists (name, age_category, email, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, 1, ?, ?)
+      INSERT INTO psychologists (name, age_category, age_categories, email, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 1, ?, ?)
     `);
 
     for (const psychologist of DEMO_PSYCHOLOGISTS) {
-      insertPsychologist.run(...psychologist, timestamp, timestamp);
+      insertPsychologist.run(
+        psychologist.name,
+        psychologist.age_categories[0],
+        serializeAgeCategories(psychologist.age_categories, psychologist.age_categories[0]),
+        psychologist.email,
+        timestamp,
+        timestamp
+      );
     }
 
     const psychologists = db.prepare("SELECT id FROM psychologists ORDER BY id").all();
@@ -281,6 +353,7 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
     }
   }
 
+  ensureSqlitePsychologistCategoryStorage();
   seedIfEmpty();
 
   const repository = {
@@ -305,48 +378,70 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
       }
     },
     async getPsychologistsByCategory(ageCategory) {
-      return db
+      if (ageCategory === "not_important") {
+        return repository.listPsychologists().then((rows) => rows.filter((row) => Boolean(row.is_active)));
+      }
+
+      return hydrateRows(
+        db
         .prepare(`
-          SELECT id, name, age_category, email, is_active
+          SELECT id, name, age_category, age_categories, email, is_active
           FROM psychologists
-          WHERE age_category = ? AND is_active = 1
+          WHERE is_active = 1
           ORDER BY name
         `)
-        .all(ageCategory)
-        .map(normalizeRow);
+        .all()
+          .map(normalizeRow)
+      ).filter((row) => row.age_categories.includes(ageCategory));
     },
     async getPublicAvailableSlotsByCategory(ageCategory) {
-      return db
+      if (ageCategory === "not_important") {
+        return hydrateRows(
+          db
+            .prepare(`
+              ${listSlotsBase}
+              WHERE p.is_active = 1
+                AND s.status = 'available'
+                AND s.booking_id IS NULL
+              ORDER BY s.starts_at
+            `)
+            .all()
+            .map(normalizeRow)
+        );
+      }
+
+      return hydrateRows(
+        db
         .prepare(`
           ${listSlotsBase}
-          WHERE p.age_category = ?
-            AND p.is_active = 1
+          WHERE p.is_active = 1
             AND s.status = 'available'
             AND s.booking_id IS NULL
           ORDER BY s.starts_at
         `)
-        .all(ageCategory)
-        .map(normalizeRow);
+        .all()
+          .map(normalizeRow)
+      ).filter((row) => row.age_categories.includes(ageCategory));
     },
     async getSlotWithPsychologist(slotId) {
-      return normalizeRow(
+      return hydratePsychologistRow(normalizeRow(
         db
           .prepare(`
             ${listSlotsBase}
             WHERE s.id = ?
           `)
           .get(Number(slotId))
-      );
+      ));
     },
     async getSlotById(slotId) {
-      return normalizeRow(
+      return hydratePsychologistRow(normalizeRow(
         db
           .prepare(`
             ${listSlotsBase}
             WHERE s.id = ?
           `)
           .get(Number(slotId))
-      );
+      ));
     },
     async insertBooking(payload, timestamp) {
       const result = db
@@ -410,14 +505,16 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
       );
     },
     async listPsychologists() {
-      return db
+      return hydrateRows(
+        db
         .prepare(`
-          SELECT id, name, age_category, email, is_active
+          SELECT id, name, age_category, age_categories, email, is_active
           FROM psychologists
           ORDER BY is_active DESC, name
         `)
         .all()
-        .map(normalizeRow);
+          .map(normalizeRow)
+      );
     },
     async listAdminBookings(filters = {}) {
       const built = buildSqliteFilterQuery(listBookingsBase, filters, "b.");
@@ -425,37 +522,46 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
     },
     async listAdminSlots(filters = {}) {
       const built = buildSqliteFilterQuery(listSlotsBase, filters, "s.");
-      return db.prepare(`${built.query} ORDER BY s.starts_at ASC`).all(...built.values).map(normalizeRow);
+      return hydrateRows(db.prepare(`${built.query} ORDER BY s.starts_at ASC`).all(...built.values).map(normalizeRow));
     },
     async getPsychologistById(psychologistId) {
-      return normalizeRow(
+      return hydratePsychologistRow(normalizeRow(
         db
           .prepare(`
-            SELECT id, name, age_category, email, is_active
+            SELECT id, name, age_category, age_categories, email, is_active
             FROM psychologists
             WHERE id = ?
           `)
           .get(Number(psychologistId))
-      );
+      ));
     },
     async insertPsychologist(payload, timestamp) {
       const result = db
         .prepare(`
-          INSERT INTO psychologists (name, age_category, email, is_active, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO psychologists (name, age_category, age_categories, email, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
         `)
-        .run(payload.name, payload.age_category, payload.email, payload.is_active ? 1 : 0, timestamp, timestamp);
+        .run(
+          payload.name,
+          payload.age_category,
+          serializeAgeCategories(payload.age_categories, payload.age_category),
+          payload.email,
+          payload.is_active ? 1 : 0,
+          timestamp,
+          timestamp
+        );
 
       return Number(result.lastInsertRowid);
     },
     async updatePsychologist(psychologistId, payload, timestamp) {
       db.prepare(`
         UPDATE psychologists
-        SET name = ?, age_category = ?, email = ?, is_active = ?, updated_at = ?
+        SET name = ?, age_category = ?, age_categories = ?, email = ?, is_active = ?, updated_at = ?
         WHERE id = ?
       `).run(
         payload.name,
         payload.age_category,
+        serializeAgeCategories(payload.age_categories, payload.age_category),
         payload.email,
         payload.is_active ? 1 : 0,
         timestamp,
@@ -562,6 +668,13 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
   }
 
   await execute(POSTGRES_SCHEMA_SQL);
+  await execute("ALTER TABLE psychologists ADD COLUMN IF NOT EXISTS age_categories TEXT");
+  await execute(`
+    UPDATE psychologists
+    SET age_categories = CONCAT('["', age_category, '"]')
+    WHERE age_categories IS NULL OR age_categories = ''
+  `);
+  await execute("ALTER TABLE bookings ALTER COLUMN child_age TYPE TEXT USING child_age::text");
 
   if (seedDemoData && (await countRows("psychologists")) === 0) {
     const timestamp = nowProvider().toISOString();
@@ -570,11 +683,17 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
     for (const psychologist of DEMO_PSYCHOLOGISTS) {
       const rows = await query(
         `
-          INSERT INTO psychologists (name, age_category, email, is_active, created_at, updated_at)
-          VALUES ($1, $2, $3, TRUE, $4, $4)
+          INSERT INTO psychologists (name, age_category, age_categories, email, is_active, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, TRUE, $5, $5)
           RETURNING id
         `,
-        [...psychologist, timestamp]
+        [
+          psychologist.name,
+          psychologist.age_categories[0],
+          serializeAgeCategories(psychologist.age_categories, psychologist.age_categories[0]),
+          psychologist.email,
+          timestamp
+        ]
       );
       insertedPsychologists.push({ id: rows[0].id });
     }
@@ -627,37 +746,76 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
         }
       },
       async getPsychologistsByCategory(ageCategory) {
-        return query(
+        if (ageCategory === "not_important") {
+          return runner.listPsychologists
+            ? runner.listPsychologists().then((rows) => rows.filter((row) => Boolean(row.is_active)))
+            : hydrateRows(await query(
+              `
+                SELECT id, name, age_category, age_categories, email, is_active
+                FROM psychologists
+                WHERE is_active = TRUE
+                ORDER BY name
+              `,
+              [],
+              runner
+            ), (row) => row);
+        }
+
+        const rows = await query(
           `
-            SELECT id, name, age_category, email, is_active
+            SELECT id, name, age_category, age_categories, email, is_active
             FROM psychologists
-            WHERE age_category = $1 AND is_active = TRUE
+            WHERE is_active = TRUE
             ORDER BY name
           `,
-          [ageCategory],
+          [],
           runner
         );
+        return hydrateRows(rows, (row) => row).filter((row) => row.age_categories.includes(ageCategory));
       },
       async getPublicAvailableSlotsByCategory(ageCategory) {
-        return query(
+        if (ageCategory === "not_important") {
+          return hydrateRows(await query(
+            `
+              SELECT
+                s.*,
+                p.name AS psychologist_name,
+                p.age_category,
+                p.age_categories,
+                p.email AS psychologist_email,
+                p.is_active
+              FROM slots s
+              JOIN psychologists p ON p.id = s.psychologist_id
+              WHERE p.is_active = TRUE
+                AND s.status = 'available'
+                AND s.booking_id IS NULL
+              ORDER BY s.starts_at
+            `,
+            [],
+            runner
+          ), (row) => row);
+        }
+
+        const rows = await query(
           `
             SELECT
               s.*,
               p.name AS psychologist_name,
               p.age_category,
+              p.age_categories,
               p.email AS psychologist_email,
               p.is_active
             FROM slots s
             JOIN psychologists p ON p.id = s.psychologist_id
-            WHERE p.age_category = $1
-              AND p.is_active = TRUE
+            WHERE p.is_active = TRUE
               AND s.status = 'available'
               AND s.booking_id IS NULL
             ORDER BY s.starts_at
           `,
-          [ageCategory],
+          [],
           runner
         );
+        return hydrateRows(rows, (row) => row).filter((row) => row.age_categories.includes(ageCategory));
       },
       async getSlotWithPsychologist(slotId, options = {}) {
         const params = [Number(slotId)];
@@ -668,6 +826,7 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
               s.*,
               p.name AS psychologist_name,
               p.age_category,
+              p.age_categories,
               p.email AS psychologist_email,
               p.is_active
             FROM slots s
@@ -678,7 +837,7 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
           params,
           runner
         );
-        return rows[0] || null;
+        return hydratePsychologistRow(rows[0] || null);
       },
       async getSlotById(slotId) {
         const rows = await query(
@@ -687,6 +846,7 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
               s.*,
               p.name AS psychologist_name,
               p.age_category,
+              p.age_categories,
               p.email AS psychologist_email,
               p.is_active
             FROM slots s
@@ -696,7 +856,7 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
           [Number(slotId)],
           runner
         );
-        return rows[0] || null;
+        return hydratePsychologistRow(rows[0] || null);
       },
       async insertBooking(payload, timestamp) {
         const rows = await query(
@@ -774,15 +934,15 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
         return rows[0] || null;
       },
       async listPsychologists() {
-        return query(
+        return hydrateRows(await query(
           `
-            SELECT id, name, age_category, email, is_active
+            SELECT id, name, age_category, age_categories, email, is_active
             FROM psychologists
             ORDER BY is_active DESC, name
           `,
           [],
           runner
-        );
+        ), (row) => row);
       },
       async listAdminBookings(filters = {}) {
         const built = buildPostgresFilters(filters, {
@@ -816,12 +976,13 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
           psychologistColumn: "s.psychologist_id",
           startsAtColumn: "s.starts_at"
         });
-        return query(
+        return hydrateRows(await query(
           `
             SELECT
               s.*,
               p.name AS psychologist_name,
               p.age_category,
+              p.age_categories,
               p.email AS psychologist_email,
               p.is_active
             FROM slots s
@@ -831,28 +992,35 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
           `,
           built.values,
           runner
-        );
+        ), (row) => row);
       },
       async getPsychologistById(psychologistId) {
         const rows = await query(
           `
-            SELECT id, name, age_category, email, is_active
+            SELECT id, name, age_category, age_categories, email, is_active
             FROM psychologists
             WHERE id = $1
           `,
           [Number(psychologistId)],
           runner
         );
-        return rows[0] || null;
+        return hydratePsychologistRow(rows[0] || null);
       },
       async insertPsychologist(payload, timestamp) {
         const rows = await query(
           `
-            INSERT INTO psychologists (name, age_category, email, is_active, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $5)
+            INSERT INTO psychologists (name, age_category, age_categories, email, is_active, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $6)
             RETURNING id
           `,
-          [payload.name, payload.age_category, payload.email, payload.is_active, timestamp],
+          [
+            payload.name,
+            payload.age_category,
+            serializeAgeCategories(payload.age_categories, payload.age_category),
+            payload.email,
+            payload.is_active,
+            timestamp
+          ],
           runner
         );
         return Number(rows[0].id);
@@ -861,10 +1029,18 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
         await execute(
           `
             UPDATE psychologists
-            SET name = $1, age_category = $2, email = $3, is_active = $4, updated_at = $5
-            WHERE id = $6
+            SET name = $1, age_category = $2, age_categories = $3, email = $4, is_active = $5, updated_at = $6
+            WHERE id = $7
           `,
-          [payload.name, payload.age_category, payload.email, payload.is_active, timestamp, Number(psychologistId)],
+          [
+            payload.name,
+            payload.age_category,
+            serializeAgeCategories(payload.age_categories, payload.age_category),
+            payload.email,
+            payload.is_active,
+            timestamp,
+            Number(psychologistId)
+          ],
           runner
         );
       },

@@ -1,7 +1,16 @@
-import { BOOKING_CUTOFF_HOURS, SLOT_DURATION_MINUTES, APP_TIMEZONE, AGE_CATEGORIES, BOOKING_STATUSES } from "./config.js";
+import {
+  BOOKING_CUTOFF_HOURS,
+  SLOT_DURATION_MINUTES,
+  APP_TIMEZONE,
+  AGE_CATEGORIES,
+  BOOKING_STATUSES,
+  CONTACT_METHODS,
+  PUBLIC_AGE_CATEGORIES
+} from "./config.js";
 
-const categoryMap = new Map(AGE_CATEGORIES.map((item) => [item.value, item.label]));
+const categoryMap = new Map(PUBLIC_AGE_CATEGORIES.map((item) => [item.value, item.label]));
 const bookingStatusMap = new Map(BOOKING_STATUSES.map((item) => [item.value, item.label]));
+const contactMethodMap = new Map(CONTACT_METHODS.map((item) => [item.value, item.label]));
 
 export class AppError extends Error {
   constructor(status, code, message, details = null) {
@@ -87,7 +96,7 @@ export function validateBookingPayload(payload) {
     ["child_name", "Укажите имя ребенка."],
     ["country", "Укажите страну."],
     ["request_text", "Опишите краткий запрос."],
-    ["preferred_contact_method", "Укажите предпочтительный способ связи."],
+    ["preferred_contact_method", "Выберите предпочтительный способ связи."],
     ["age_category", "Выберите возрастную категорию."]
   ];
 
@@ -105,13 +114,19 @@ export function validateBookingPayload(payload) {
     errors.parent_email = "Укажите корректный email.";
   }
 
-  const childAge = Number(payload.child_age);
-  if (!Number.isInteger(childAge) || childAge < 1 || childAge > 18) {
-    errors.child_age = "Возраст ребенка должен быть целым числом от 1 до 18.";
+  const childAge = cleanString(payload.child_age);
+  if (!childAge) {
+    errors.child_age = "Укажите возраст ребенка или детей.";
+  } else if (childAge.length > 120) {
+    errors.child_age = "Поле возраста слишком длинное.";
   }
 
   if (!categoryMap.has(cleanString(payload.age_category))) {
     errors.age_category = "Выбрана неизвестная возрастная категория.";
+  }
+
+  if (!contactMethodMap.has(cleanString(payload.preferred_contact_method))) {
+    errors.preferred_contact_method = "Выберите способ связи: Telegram или Email.";
   }
 
   return {
@@ -145,6 +160,10 @@ export function getCategoryLabel(value) {
 
 export function getBookingStatusLabel(value) {
   return bookingStatusMap.get(value) || value;
+}
+
+export function getContactMethodLabel(value) {
+  return contactMethodMap.get(value) || value;
 }
 
 export function readJsonBody(req) {

@@ -291,6 +291,29 @@ label,
   gap: 8px;
 }
 
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.checkbox-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid rgba(122, 90, 67, 0.24);
+  border-radius: 12px;
+  background: #fffdfa;
+  cursor: pointer;
+}
+
+.checkbox-pill input {
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+
 input,
 select,
 textarea {

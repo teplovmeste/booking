@@ -1,5 +1,6 @@
 const state = {
   categories: [],
+  contactMethods: [],
   selectedCategory: null,
   selectedSlot: null,
   successMessage: ""
@@ -56,6 +57,15 @@ function renderCategories() {
     .join("");
 }
 
+function renderContactMethods() {
+  elements.bookingForm.elements.preferred_contact_method.innerHTML = [
+    '<option value="">Выберите способ связи</option>',
+    ...state.contactMethods.map(
+      (item) => `<option value="${item.value}">${item.label}</option>`
+    )
+  ].join("");
+}
+
 function renderPsychologists(data) {
   const hasAnySlots = data.psychologists.some((item) => item.slots.length > 0);
   elements.categoryEmpty.classList.toggle("hidden", hasAnySlots);
@@ -78,7 +88,7 @@ function renderPsychologists(data) {
         <article class="psychologist-card">
           <div class="psychologist-card__head">
             <h3>${psychologist.name}</h3>
-            <p>${psychologist.age_category_label}</p>
+            <p>Работает с: ${psychologist.age_categories_label}</p>
           </div>
           <div class="slot-list">
             ${slotsMarkup}
@@ -118,10 +128,12 @@ async function loadAvailability(ageCategory) {
 async function bootstrap() {
   const meta = await api("./api/public/meta");
   state.categories = meta.categories;
+  state.contactMethods = meta.contact_methods || [];
   state.successMessage = meta.success_message;
   state.selectedCategory = meta.categories[0]?.value || null;
 
   renderCategories();
+  renderContactMethods();
   elements.categoryGrid.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-category]");
     if (!button) return;

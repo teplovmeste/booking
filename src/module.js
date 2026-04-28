@@ -1,4 +1,12 @@
-import { AGE_CATEGORIES, APP_TIMEZONE, BOOKING_STATUSES, BOOKING_SUCCESS_MESSAGE, SLOT_STATUSES } from "./config.js";
+import {
+  AGE_CATEGORIES,
+  APP_TIMEZONE,
+  BOOKING_STATUSES,
+  BOOKING_SUCCESS_MESSAGE,
+  CONTACT_METHODS,
+  PUBLIC_AGE_CATEGORIES,
+  SLOT_STATUSES
+} from "./config.js";
 import {
   AppError,
   assertValidBookingStatus,
@@ -8,6 +16,7 @@ import {
   formatMoscowDateTime,
   getBookingStatusLabel,
   getCategoryLabel,
+  getContactMethodLabel,
   isPublicBookingClosed,
   moscowInputToUtcIso,
   normalizeOptionalDate,
@@ -15,18 +24,58 @@ import {
   validateBookingPayload
 } from "./utils.js";
 
+function normalizePsychologistCategories(row) {
+  let values = [];
+
+  if (Array.isArray(row?.age_categories)) {
+    values = row.age_categories;
+  } else if (typeof row?.age_categories === "string" && row.age_categories) {
+    try {
+      values = JSON.parse(row.age_categories);
+    } catch {
+      values = [];
+    }
+  } else if (row?.age_category) {
+    values = [row.age_category];
+  }
+
+  const validValues = AGE_CATEGORIES.map((item) => item.value);
+  return [...new Set(values.map((value) => cleanString(value)).filter((value) => validValues.includes(value)))];
+}
+
+function getPsychologistCategoryMeta(row) {
+  const ageCategories = normalizePsychologistCategories(row);
+  const primaryAgeCategory = ageCategories[0] || cleanString(row?.age_category);
+  const ageCategoryLabels = ageCategories.map((value) => getCategoryLabel(value));
+
+  return {
+    ageCategories,
+    primaryAgeCategory,
+    ageCategoryLabels,
+    ageCategoriesLabel: ageCategoryLabels.join(", ")
+  };
+}
+
 function serializePsychologist(row) {
+  const categoryMeta = getPsychologistCategoryMeta(row);
+
   return {
     id: Number(row.id),
     name: row.name,
-    age_category: row.age_category,
-    age_category_label: getCategoryLabel(row.age_category),
+    age_category: categoryMeta.primaryAgeCategory,
+    age_category_label: getCategoryLabel(categoryMeta.primaryAgeCategory),
+    age_categories: categoryMeta.ageCategories,
+    age_categories_labels: categoryMeta.ageCategoryLabels,
+    age_categories_label: categoryMeta.ageCategoriesLabel,
     email: row.email,
     is_active: Boolean(row.is_active)
   };
 }
 
-function serializeSlot(row) {
+function serializeSlot(row, options = {}) {
+  const categoryMeta = getPsychologistCategoryMeta(row);
+  const displayAgeCategory = options.displayAgeCategory || categoryMeta.primaryAgeCategory;
+
   return {
     id: Number(row.id),
     psychologist_id: Number(row.psychologist_id),
@@ -38,8 +87,11 @@ function serializeSlot(row) {
     timezone: row.timezone,
     status: row.status,
     booking_id: row.booking_id === null || row.booking_id === undefined ? null : Number(row.booking_id),
-    age_category: row.age_category,
-    age_category_label: getCategoryLabel(row.age_category)
+    age_category: displayAgeCategory,
+    age_category_label: getCategoryLabel(displayAgeCategory),
+    psychologist_age_categories: categoryMeta.ageCategories,
+    psychologist_age_categories_labels: categoryMeta.ageCategoryLabels,
+    psychologist_age_categories_label: categoryMeta.ageCategoriesLabel
   };
 }
 
@@ -58,10 +110,11 @@ function serializeBooking(row) {
     parent_phone: row.parent_phone,
     parent_telegram: row.parent_telegram,
     child_name: row.child_name,
-    child_age: Number(row.child_age),
+    child_age: String(row.child_age),
     country: row.country,
     request_text: row.request_text,
     preferred_contact_method: row.preferred_contact_method,
+    preferred_contact_method_label: getContactMethodLabel(row.preferred_contact_method),
     status: row.status,
     status_label: getBookingStatusLabel(row.status),
     created_at: toIso(row.created_at),
@@ -79,8 +132,16 @@ function validatePsychologistPayload(payload, { requireAllFields = true } = {}) 
   const errors = {};
   const name = cleanString(payload.name);
   const email = cleanString(payload.email);
-  const ageCategory = cleanString(payload.age_category);
+  const ageCategoriesRaw = Array.isArray(payload.age_categories)
+    ? payload.age_categories
+    : payload.age_categories !== undefined
+      ? [payload.age_categories]
+      : payload.age_category !== undefined
+        ? [payload.age_category]
+        : [];
+  const ageCategories = [...new Set(ageCategoriesRaw.map((value) => cleanString(value)).filter(Boolean))];
   const isActiveValue = payload.is_active;
+  const validAgeCategories = AGE_CATEGORIES.map((item) => item.value);
 
   if (requireAllFields || "name" in payload) {
     if (!name) {
@@ -94,8 +155,12 @@ function validatePsychologistPayload(payload, { requireAllFields = true } = {}) 
     }
   }
 
-  if ((requireAllFields || "age_category" in payload) && !AGE_CATEGORIES.some((item) => item.value === ageCategory)) {
-    errors.age_category = "Выберите корректную возрастную категорию.";
+  if (requireAllFields || "age_category" in payload || "age_categories" in payload) {
+    if (!ageCategories.length) {
+      errors.age_categories = "Выберите хотя бы одну возрастную категорию.";
+    } else if (!ageCategories.every((value) => validAgeCategories.includes(value))) {
+      errors.age_categories = "Выберите корректные возрастные категории.";
+    }
   }
 
   if ((requireAllFields || "is_active" in payload)
@@ -109,7 +174,8 @@ function validatePsychologistPayload(payload, { requireAllFields = true } = {}) 
     value: {
       name,
       email,
-      age_category: ageCategory,
+      age_category: ageCategories[0] || "",
+      age_categories: ageCategories,
       is_active: isActiveValue === true || isActiveValue === "true" || isActiveValue === 1 || isActiveValue === "1"
     }
   };
@@ -119,7 +185,8 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
   async function getPublicMeta() {
     return {
       success_message: BOOKING_SUCCESS_MESSAGE,
-      categories: AGE_CATEGORIES
+      categories: PUBLIC_AGE_CATEGORIES,
+      contact_methods: CONTACT_METHODS
     };
   }
 
@@ -137,11 +204,15 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
   }
 
   async function listPublicAvailability(ageCategory) {
-    if (!AGE_CATEGORIES.some((item) => item.value === ageCategory)) {
+    if (!PUBLIC_AGE_CATEGORIES.some((item) => item.value === ageCategory)) {
       throw new AppError(400, "INVALID_AGE_CATEGORY", "Выбрана неизвестная возрастная категория.");
     }
 
-    const psychologists = (await repository.getPsychologistsByCategory(ageCategory)).map((row) => ({
+    const psychologistRows = ageCategory === "not_important"
+      ? (await repository.listPsychologists()).filter((row) => Boolean(row.is_active))
+      : await repository.getPsychologistsByCategory(ageCategory);
+
+    const psychologists = psychologistRows.map((row) => ({
       ...serializePsychologist(row),
       slots: []
     }));
@@ -152,7 +223,7 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
     );
 
     for (const slot of slots) {
-      grouped.get(Number(slot.psychologist_id))?.slots.push(serializeSlot(slot));
+      grouped.get(Number(slot.psychologist_id))?.slots.push(serializeSlot(slot, { displayAgeCategory: ageCategory }));
     }
 
     return {
@@ -178,7 +249,7 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
         throw new AppError(404, "SLOT_NOT_FOUND", "Выбранный слот не найден.");
       }
 
-      if (slot.age_category !== value.age_category) {
+      if (value.age_category !== "not_important" && !normalizePsychologistCategories(slot).includes(value.age_category)) {
         throw new AppError(400, "AGE_CATEGORY_MISMATCH", "Слот не соответствует выбранной возрастной категории.");
       }
 
@@ -348,6 +419,14 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
         throw new AppError(409, "TARGET_SLOT_UNAVAILABLE", "Нельзя перенести заявку на занятый слот.");
       }
 
+      if (booking.age_category !== "not_important" && !normalizePsychologistCategories(targetSlot).includes(booking.age_category)) {
+        throw new AppError(
+          400,
+          "TARGET_SLOT_CATEGORY_MISMATCH",
+          "Нельзя перенести заявку к психологу, который не работает с этой возрастной категорией."
+        );
+      }
+
       const timestamp = nowIso(nowProvider);
       const targetMove = await tx.markTargetSlotBooked(Number(bookingId), timestamp, Number(targetSlotId));
       if (targetMove !== 1) {
@@ -359,7 +438,7 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
         bookingId: Number(bookingId),
         slotId: Number(targetSlotId),
         psychologistId: Number(targetSlot.psychologist_id),
-        ageCategory: targetSlot.age_category,
+        ageCategory: booking.age_category,
         timestamp
       });
     });

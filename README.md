@@ -9,7 +9,7 @@
 - серверная защита от двойного бронирования
 - Postgres/Supabase для продакшена
 - SQLite fallback для локальной разработки и тестов
-- email-уведомления через SMTP
+- email-уведомления через Resend
 - Render-ready конфиг
 - GitHub Actions CI
 
@@ -111,6 +111,8 @@ npm run seed:demo
    - `ADMIN_EMAIL`
    - `ADMIN_BASIC_AUTH_USER`
    - `ADMIN_BASIC_AUTH_PASS`
+   - `RESEND_API_KEY`
+   - `RESEND_FROM`
    - `SMTP_HOST`
    - `SMTP_PORT`
    - `SMTP_SECURE`
@@ -141,6 +143,8 @@ Render использует:
 - `ADMIN_EMAIL`
 - `ADMIN_BASIC_AUTH_USER`
 - `ADMIN_BASIC_AUTH_PASS`
+- `RESEND_API_KEY`
+- `RESEND_FROM`
 - `SMTP_HOST`
 - `SMTP_PORT`
 - `SMTP_SECURE`
@@ -151,9 +155,17 @@ Render использует:
 
 ## Email
 
-Для хостинга используется SMTP.
+Основной продакшен-вариант: Resend.
 
-Если SMTP не настроен:
+Рекомендуемый набор:
+
+- `ADMIN_EMAIL=support@teplovmeste.com`
+- `RESEND_FROM=support@teplovmeste.com`
+- `RESEND_API_KEY=...`
+
+SMTP и `sendmail` оставлены как fallback.
+
+Если email-канал не настроен:
 
 - бронь все равно создается
 - ошибка логируется в `data/email-errors.log` локально

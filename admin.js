@@ -68,13 +68,37 @@ function buildQuery(params) {
 function buildPsychologistOptions() {
   return state.psychologists.map((item) => ({
     value: String(item.id),
-    label: `${item.name} — ${item.age_category_label}`
+    label: `${item.name} — ${item.age_categories_label}`
   }));
+}
+
+function renderCategoryCheckboxes(selectedValues = [], namespace = "psychologist") {
+  const selected = new Set(selectedValues);
+
+  return state.meta.categories
+    .map(
+      (category, index) => `
+        <label class="checkbox-pill" for="${namespace}-category-${index}">
+          <input
+            id="${namespace}-category-${index}"
+            name="age_categories"
+            type="checkbox"
+            value="${category.value}"
+            ${selected.has(category.value) ? "checked" : ""}
+          />
+          <span>${category.label}</span>
+        </label>
+      `
+    )
+    .join("");
 }
 
 function refreshPsychologistSelects() {
   const psychologists = buildPsychologistOptions();
-  fillSelect(elements.psychologistForm.elements.age_category, state.meta.categories);
+  elements.psychologistForm.querySelector("[data-psychologist-categories]").innerHTML = renderCategoryCheckboxes(
+    [],
+    "create"
+  );
   fillSelect(elements.slotForm.elements.psychologist_id, psychologists);
   fillSelect(elements.bookingFilters.elements.psychologist_id, psychologists, "Все психологи");
   fillSelect(elements.slotFilters.elements.psychologist_id, psychologists, "Все психологи");
@@ -95,7 +119,7 @@ function renderPsychologists(items) {
           <div class="admin-card__head">
             <div>
               <h3>${psychologist.name}</h3>
-              <p>${psychologist.age_category_label}</p>
+              <p>${psychologist.age_categories_label}</p>
             </div>
             <span class="status-pill">${psychologist.is_active ? "Активен" : "Выключен"}</span>
           </div>
@@ -110,18 +134,10 @@ function renderPsychologists(items) {
                 <input name="email" type="email" value="${escapeHtml(psychologist.email)}" required />
               </label>
               <label>
-                <span>Возрастная категория</span>
-                <select name="age_category">
-                  ${state.meta.categories
-                    .map(
-                      (category) => `
-                        <option value="${category.value}"${category.value === psychologist.age_category ? " selected" : ""}>
-                          ${category.label}
-                        </option>
-                      `
-                    )
-                    .join("")}
-                </select>
+                <span>Возрастные категории</span>
+                <div class="checkbox-group">
+                  ${renderCategoryCheckboxes(psychologist.age_categories, `edit-${psychologist.id}`)}
+                </div>
               </label>
               <label>
                 <span>Статус</span>
@@ -185,7 +201,7 @@ function renderBookings(items) {
             <p><strong>Телефон:</strong> ${booking.parent_phone}</p>
             <p><strong>Telegram:</strong> ${booking.parent_telegram}</p>
             <p><strong>Страна:</strong> ${booking.country}</p>
-            <p><strong>Способ связи:</strong> ${booking.preferred_contact_method}</p>
+            <p><strong>Способ связи:</strong> ${booking.preferred_contact_method_label}</p>
             <p><strong>Запрос:</strong> ${booking.request_text}</p>
           </div>
           <div class="admin-actions">
@@ -234,7 +250,7 @@ function renderSlots(items) {
             <span class="status-pill">${slot.status}</span>
           </div>
           <div class="admin-card__grid">
-            <p><strong>Категория:</strong> ${slot.age_category_label}</p>
+            <p><strong>Категории:</strong> ${slot.psychologist_age_categories_label}</p>
             <p><strong>Часовой пояс:</strong> ${slot.timezone}</p>
             <p><strong>ID слота:</strong> ${slot.id}</p>
           </div>
@@ -284,10 +300,19 @@ async function refreshLists() {
   await loadBookings();
 }
 
+function formToPayload(form) {
+  const formData = new FormData(form);
+  const payload = Object.fromEntries(
+    [...formData.entries()].filter(([key]) => key !== "age_categories")
+  );
+  payload.age_categories = formData.getAll("age_categories");
+  return payload;
+}
+
 elements.psychologistForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearFeedback(elements.psychologistFormFeedback);
-  const payload = Object.fromEntries(new FormData(elements.psychologistForm).entries());
+  const payload = formToPayload(elements.psychologistForm);
 
   try {
     await api("./api/admin/psychologists", {
@@ -311,7 +336,7 @@ elements.psychologistsList.addEventListener("submit", async (event) => {
 
   event.preventDefault();
   clearFeedback(elements.psychologistFormFeedback);
-  const payload = Object.fromEntries(new FormData(form).entries());
+  const payload = formToPayload(form);
 
   try {
     await api(`./api/admin/psychologists/${form.dataset.psychologistId}`, {

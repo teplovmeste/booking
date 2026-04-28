@@ -49,10 +49,10 @@ function validBookingPayload(slotId, ageCategory) {
     parent_phone: "+79990000000",
     parent_telegram: "@irinaparent",
     child_name: "Миша",
-    child_age: 8,
+    child_age: "8 лет",
     country: "Россия",
     request_text: "Нужна консультация по адаптации в школе.",
-    preferred_contact_method: "Telegram"
+    preferred_contact_method: "telegram"
   };
 }
 
@@ -74,13 +74,14 @@ test("admin can create psychologist", async () => {
   const created = await moduleApi.createPsychologist({
     name: "Новый психолог",
     email: "new-psych@example.com",
-    age_category: "preschool",
+    age_categories: ["preschool", "teens"],
     is_active: "true"
   });
 
   assert.equal(created.name, "Новый психолог");
   assert.equal(created.email, "new-psych@example.com");
   assert.equal(created.age_category, "preschool");
+  assert.deepEqual(created.age_categories, ["preschool", "teens"]);
   assert.equal(created.is_active, true);
 });
 
@@ -92,13 +93,14 @@ test("admin can update psychologist", async () => {
   const updated = await moduleApi.updatePsychologist(psychologist.id, {
     name: "Анна Обновленная",
     email: "anna-updated@example.com",
-    age_category: "teens",
+    age_categories: ["primary_school", "teens"],
     is_active: "false"
   });
 
   assert.equal(updated.name, "Анна Обновленная");
   assert.equal(updated.email, "anna-updated@example.com");
-  assert.equal(updated.age_category, "teens");
+  assert.equal(updated.age_category, "primary_school");
+  assert.deepEqual(updated.age_categories, ["primary_school", "teens"]);
   assert.equal(updated.is_active, false);
 });
 
@@ -106,7 +108,7 @@ test("public availability shows only matching psychologists and only available s
   const { repository, moduleApi } = await createTestModule();
   const preschool = await moduleApi.listPublicAvailability("preschool");
 
-  assert.ok(preschool.psychologists.every((item) => item.age_category === "preschool"));
+  assert.ok(preschool.psychologists.every((item) => item.age_categories.includes("preschool")));
   assert.ok(preschool.psychologists.some((item) => item.slots.length > 0));
 
   const slotId = (await getFirstAvailableSlotForCategory(repository, "preschool")).id;
@@ -117,9 +119,28 @@ test("public availability shows only matching psychologists and only available s
   assert.ok(!flattenedSlotIds.includes(Number(slotId)));
 });
 
+test("one psychologist can appear in multiple age categories", async () => {
+  const { moduleApi } = await createTestModule();
+
+  const primarySchool = await moduleApi.listPublicAvailability("primary_school");
+  const teens = await moduleApi.listPublicAvailability("teens");
+
+  const sharedName = "Дарья Соболева";
+  assert.ok(primarySchool.psychologists.some((item) => item.name === sharedName));
+  assert.ok(teens.psychologists.some((item) => item.name === sharedName));
+});
+
+test("not important category shows all active psychologists with available slots", async () => {
+  const { moduleApi } = await createTestModule();
+  const availability = await moduleApi.listPublicAvailability("not_important");
+
+  assert.ok(availability.psychologists.length >= 4);
+  assert.ok(availability.psychologists.some((item) => item.slots.length > 0));
+});
+
 test("slots within 24 hours are hidden from public booking", async () => {
   const { repository, moduleApi } = await createTestModule();
-  const psychologist = (await moduleApi.getAdminMeta()).psychologists.find((item) => item.age_category === "teens");
+  const psychologist = (await moduleApi.getAdminMeta()).psychologists.find((item) => item.age_categories.includes("teens"));
 
   await moduleApi.createSlot({
     psychologist_id: psychologist.id,
@@ -149,6 +170,17 @@ test("successful booking locks slot and sends notifications", async () => {
   assert.equal(slot.status, "booked");
   assert.equal(Number(slot.booking_id), result.booking.id);
   assert.equal(sentNotifications.length, 1);
+});
+
+test("booking can be created when parent selected not important", async () => {
+  const { repository, moduleApi } = await createTestModule();
+  const slotId = (await getFirstAvailableSlotForCategory(repository, "teens")).id;
+
+  const result = await moduleApi.createBooking(validBookingPayload(slotId, "not_important"));
+  const slot = await repository.getSlotWithPsychologist(slotId);
+
+  assert.equal(result.booking.age_category, "not_important");
+  assert.equal(slot.status, "booked");
 });
 
 test("repeat booking for same slot is impossible", async () => {
@@ -251,15 +283,15 @@ test("invalid booking payload is rejected with field details", async () => {
   await assert.rejects(
     () =>
       moduleApi.createBooking({
-        ...validBookingPayload(slotId, "teens"),
-        parent_email: "broken-email",
-        child_age: 42,
-        request_text: ""
-      }),
+      ...validBookingPayload(slotId, "teens"),
+      parent_email: "broken-email",
+      child_age: "",
+      request_text: ""
+    }),
     (error) => {
       assert.equal(error.code, "INVALID_BOOKING_FORM");
       assert.equal(error.details.parent_email, "Укажите корректный email.");
-      assert.equal(error.details.child_age, "Возраст ребенка должен быть целым числом от 1 до 18.");
+      assert.equal(error.details.child_age, "Укажите возраст ребенка или детей.");
       assert.equal(error.details.request_text, "Опишите краткий запрос.");
       return true;
     }
