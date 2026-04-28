@@ -351,6 +351,16 @@ textarea {
   gap: 16px;
 }
 
+.admin-list {
+  margin-top: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.compact-form {
+  margin-top: 0;
+}
+
 .admin-card__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

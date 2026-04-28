@@ -75,6 +75,46 @@ function toIso(value) {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
+function validatePsychologistPayload(payload, { requireAllFields = true } = {}) {
+  const errors = {};
+  const name = cleanString(payload.name);
+  const email = cleanString(payload.email);
+  const ageCategory = cleanString(payload.age_category);
+  const isActiveValue = payload.is_active;
+
+  if (requireAllFields || "name" in payload) {
+    if (!name) {
+      errors.name = "Укажите имя психолога.";
+    }
+  }
+
+  if (requireAllFields || "email" in payload) {
+    if (!email) {
+      errors.email = "Укажите email психолога.";
+    }
+  }
+
+  if ((requireAllFields || "age_category" in payload) && !AGE_CATEGORIES.some((item) => item.value === ageCategory)) {
+    errors.age_category = "Выберите корректную возрастную категорию.";
+  }
+
+  if ((requireAllFields || "is_active" in payload)
+    && !["true", "false", true, false, 1, 0, "1", "0"].includes(isActiveValue)) {
+    errors.is_active = "Укажите корректный статус активности.";
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+    value: {
+      name,
+      email,
+      age_category: ageCategory,
+      is_active: isActiveValue === true || isActiveValue === "true" || isActiveValue === 1 || isActiveValue === "1"
+    }
+  };
+}
+
 export function createBookingModule({ repository, sendBookingNotifications, nowProvider = () => new Date() }) {
   async function getPublicMeta() {
     return {
@@ -90,6 +130,10 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
       slot_statuses: SLOT_STATUSES,
       psychologists: (await repository.listPsychologists()).map(serializePsychologist)
     };
+  }
+
+  async function listPsychologists() {
+    return (await repository.listPsychologists()).map(serializePsychologist);
   }
 
   async function listPublicAvailability(ageCategory) {
@@ -216,6 +260,31 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
     return serializeSlot(await repository.getSlotById(slotId));
   }
 
+  async function createPsychologist(payload) {
+    const validation = validatePsychologistPayload(payload);
+    if (!validation.valid) {
+      throw new AppError(400, "INVALID_PSYCHOLOGIST_FORM", "Форма психолога заполнена с ошибками.", validation.errors);
+    }
+
+    const psychologistId = await repository.insertPsychologist(validation.value, nowIso(nowProvider));
+    return serializePsychologist(await repository.getPsychologistById(psychologistId));
+  }
+
+  async function updatePsychologist(psychologistId, payload) {
+    const existing = await repository.getPsychologistById(Number(psychologistId));
+    if (!existing) {
+      throw new AppError(404, "PSYCHOLOGIST_NOT_FOUND", "Психолог не найден.");
+    }
+
+    const validation = validatePsychologistPayload(payload);
+    if (!validation.valid) {
+      throw new AppError(400, "INVALID_PSYCHOLOGIST_FORM", "Форма психолога заполнена с ошибками.", validation.errors);
+    }
+
+    await repository.updatePsychologist(Number(psychologistId), validation.value, nowIso(nowProvider));
+    return serializePsychologist(await repository.getPsychologistById(Number(psychologistId)));
+  }
+
   async function updateBookingStatus(bookingId, status) {
     assertValidBookingStatus(status);
     const booking = await repository.getBookingWithSlot(Number(bookingId));
@@ -301,10 +370,13 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
   return {
     getPublicMeta,
     getAdminMeta,
+    listPsychologists,
     listPublicAvailability,
     createBooking,
     listAdminBookings,
     listAdminSlots,
+    createPsychologist,
+    updatePsychologist,
     createSlot,
     updateBookingStatus,
     cancelBooking,

@@ -69,6 +69,39 @@ test("admin can create slot", async () => {
   assert.equal(slot.status, "available");
 });
 
+test("admin can create psychologist", async () => {
+  const { moduleApi } = await createTestModule();
+  const created = await moduleApi.createPsychologist({
+    name: "Новый психолог",
+    email: "new-psych@example.com",
+    age_category: "preschool",
+    is_active: "true"
+  });
+
+  assert.equal(created.name, "Новый психолог");
+  assert.equal(created.email, "new-psych@example.com");
+  assert.equal(created.age_category, "preschool");
+  assert.equal(created.is_active, true);
+});
+
+test("admin can update psychologist", async () => {
+  const { moduleApi } = await createTestModule();
+  const meta = await moduleApi.getAdminMeta();
+  const psychologist = meta.psychologists[0];
+
+  const updated = await moduleApi.updatePsychologist(psychologist.id, {
+    name: "Анна Обновленная",
+    email: "anna-updated@example.com",
+    age_category: "teens",
+    is_active: "false"
+  });
+
+  assert.equal(updated.name, "Анна Обновленная");
+  assert.equal(updated.email, "anna-updated@example.com");
+  assert.equal(updated.age_category, "teens");
+  assert.equal(updated.is_active, false);
+});
+
 test("public availability shows only matching psychologists and only available slots", async () => {
   const { repository, moduleApi } = await createTestModule();
   const preschool = await moduleApi.listPublicAvailability("preschool");

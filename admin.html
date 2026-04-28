@@ -25,6 +25,39 @@
       <main class="admin-layout">
         <section class="panel panel-soft">
           <div class="section-heading">
+            <p class="eyebrow">Психологи</p>
+            <h2>Управление психологами</h2>
+          </div>
+          <div class="feedback hidden" id="psychologist-form-feedback"></div>
+          <form class="admin-form" id="psychologist-form">
+            <div class="form-grid">
+              <label>
+                <span>Имя</span>
+                <input name="name" type="text" required />
+              </label>
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" required />
+              </label>
+              <label>
+                <span>Возрастная категория</span>
+                <select name="age_category" required></select>
+              </label>
+              <label>
+                <span>Статус</span>
+                <select name="is_active" required>
+                  <option value="true">Активен</option>
+                  <option value="false">Выключен</option>
+                </select>
+              </label>
+            </div>
+            <button class="button-primary" type="submit">Добавить психолога</button>
+          </form>
+          <div class="table-card admin-list" id="psychologists-list"></div>
+        </section>
+
+        <section class="panel panel-soft">
+          <div class="section-heading">
             <p class="eyebrow">Слоты</p>
             <h2>Создать слот</h2>
           </div>

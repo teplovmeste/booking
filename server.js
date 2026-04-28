@@ -14,7 +14,7 @@ import { createRepository } from "./src/db.js";
 import { sendBookingNotifications } from "./src/email.js";
 import { getStaticFile, isStaticMethod, stripBasePath } from "./src/http-routing.js";
 import { createBookingModule } from "./src/module.js";
-import { handleRouteError, notFound, readJsonBody, sendJson } from "./src/utils.js";
+import { AppError, handleRouteError, notFound, readJsonBody, sendJson } from "./src/utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -89,6 +89,24 @@ async function routeRequest(req, res) {
 
   if (req.method === "GET" && pathname === "/api/admin/meta") {
     sendJson(res, 200, { ok: true, data: await moduleApi.getAdminMeta() });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/admin/psychologists") {
+    sendJson(res, 200, { ok: true, data: await moduleApi.listPsychologists() });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/admin/psychologists") {
+    const payload = await readJsonBody(req);
+    sendJson(res, 201, { ok: true, data: await moduleApi.createPsychologist(payload) });
+    return;
+  }
+
+  if (req.method === "PATCH" && /^\/api\/admin\/psychologists\/\d+$/.test(pathname)) {
+    const psychologistId = Number(pathname.split("/").pop());
+    const payload = await readJsonBody(req);
+    sendJson(res, 200, { ok: true, data: await moduleApi.updatePsychologist(psychologistId, payload) });
     return;
   }
 

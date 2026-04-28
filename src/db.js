@@ -438,6 +438,30 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
           .get(Number(psychologistId))
       );
     },
+    async insertPsychologist(payload, timestamp) {
+      const result = db
+        .prepare(`
+          INSERT INTO psychologists (name, age_category, email, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `)
+        .run(payload.name, payload.age_category, payload.email, payload.is_active ? 1 : 0, timestamp, timestamp);
+
+      return Number(result.lastInsertRowid);
+    },
+    async updatePsychologist(psychologistId, payload, timestamp) {
+      db.prepare(`
+        UPDATE psychologists
+        SET name = ?, age_category = ?, email = ?, is_active = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        payload.name,
+        payload.age_category,
+        payload.email,
+        payload.is_active ? 1 : 0,
+        timestamp,
+        Number(psychologistId)
+      );
+    },
     async insertSlot(payload, timestamp) {
       const result = db
         .prepare(`
@@ -820,6 +844,29 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
           runner
         );
         return rows[0] || null;
+      },
+      async insertPsychologist(payload, timestamp) {
+        const rows = await query(
+          `
+            INSERT INTO psychologists (name, age_category, email, is_active, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $5)
+            RETURNING id
+          `,
+          [payload.name, payload.age_category, payload.email, payload.is_active, timestamp],
+          runner
+        );
+        return Number(rows[0].id);
+      },
+      async updatePsychologist(psychologistId, payload, timestamp) {
+        await execute(
+          `
+            UPDATE psychologists
+            SET name = $1, age_category = $2, email = $3, is_active = $4, updated_at = $5
+            WHERE id = $6
+          `,
+          [payload.name, payload.age_category, payload.email, payload.is_active, timestamp, Number(psychologistId)],
+          runner
+        );
       },
       async insertSlot(payload, timestamp) {
         const rows = await query(

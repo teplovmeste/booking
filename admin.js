@@ -1,10 +1,15 @@
 const state = {
   meta: null,
   bookingsFilters: {},
-  slotsFilters: {}
+  slotsFilters: {},
+  currentSlots: [],
+  psychologists: []
 };
 
 const elements = {
+  psychologistForm: document.getElementById("psychologist-form"),
+  psychologistFormFeedback: document.getElementById("psychologist-form-feedback"),
+  psychologistsList: document.getElementById("psychologists-list"),
   slotForm: document.getElementById("slot-form"),
   slotFormFeedback: document.getElementById("slot-form-feedback"),
   bookingFilters: document.getElementById("booking-filters"),
@@ -58,6 +63,82 @@ function buildQuery(params) {
   });
   const query = searchParams.toString();
   return query ? `?${query}` : "";
+}
+
+function buildPsychologistOptions() {
+  return state.psychologists.map((item) => ({
+    value: String(item.id),
+    label: `${item.name} — ${item.age_category_label}`
+  }));
+}
+
+function refreshPsychologistSelects() {
+  const psychologists = buildPsychologistOptions();
+  fillSelect(elements.psychologistForm.elements.age_category, state.meta.categories);
+  fillSelect(elements.slotForm.elements.psychologist_id, psychologists);
+  fillSelect(elements.bookingFilters.elements.psychologist_id, psychologists, "Все психологи");
+  fillSelect(elements.slotFilters.elements.psychologist_id, psychologists, "Все психологи");
+  fillSelect(elements.bookingFilters.elements.status, state.meta.booking_statuses, "Все статусы");
+  fillSelect(elements.slotFilters.elements.status, state.meta.slot_statuses, "Все статусы");
+}
+
+function renderPsychologists(items) {
+  if (!items.length) {
+    elements.psychologistsList.innerHTML = '<p class="empty-state">Психологов пока нет.</p>';
+    return;
+  }
+
+  elements.psychologistsList.innerHTML = items
+    .map(
+      (psychologist) => `
+        <article class="admin-card">
+          <div class="admin-card__head">
+            <div>
+              <h3>${psychologist.name}</h3>
+              <p>${psychologist.age_category_label}</p>
+            </div>
+            <span class="status-pill">${psychologist.is_active ? "Активен" : "Выключен"}</span>
+          </div>
+          <form class="admin-form compact-form" data-psychologist-form data-psychologist-id="${psychologist.id}">
+            <div class="admin-card__grid">
+              <label>
+                <span>Имя</span>
+                <input name="name" type="text" value="${escapeHtml(psychologist.name)}" required />
+              </label>
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" value="${escapeHtml(psychologist.email)}" required />
+              </label>
+              <label>
+                <span>Возрастная категория</span>
+                <select name="age_category">
+                  ${state.meta.categories
+                    .map(
+                      (category) => `
+                        <option value="${category.value}"${category.value === psychologist.age_category ? " selected" : ""}>
+                          ${category.label}
+                        </option>
+                      `
+                    )
+                    .join("")}
+                </select>
+              </label>
+              <label>
+                <span>Статус</span>
+                <select name="is_active">
+                  <option value="true"${psychologist.is_active ? " selected" : ""}>Активен</option>
+                  <option value="false"${psychologist.is_active ? "" : " selected"}>Выключен</option>
+                </select>
+              </label>
+            </div>
+            <div class="admin-actions">
+              <button class="button-secondary" type="submit">Сохранить</button>
+            </div>
+          </form>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function renderBookings(items) {
@@ -177,16 +258,14 @@ function renderSlots(items) {
 async function loadMeta() {
   const meta = await api("./api/admin/meta");
   state.meta = meta;
+  state.psychologists = meta.psychologists;
+  refreshPsychologistSelects();
+}
 
-  const psychologists = meta.psychologists.map((item) => ({
-    value: String(item.id),
-    label: `${item.name} — ${item.age_category_label}`
-  }));
-  fillSelect(elements.slotForm.elements.psychologist_id, psychologists);
-  fillSelect(elements.bookingFilters.elements.psychologist_id, psychologists, "Все психологи");
-  fillSelect(elements.slotFilters.elements.psychologist_id, psychologists, "Все психологи");
-  fillSelect(elements.bookingFilters.elements.status, meta.booking_statuses, "Все статусы");
-  fillSelect(elements.slotFilters.elements.status, meta.slot_statuses, "Все статусы");
+async function loadPsychologists() {
+  state.psychologists = await api("./api/admin/psychologists");
+  refreshPsychologistSelects();
+  renderPsychologists(state.psychologists);
 }
 
 async function loadBookings() {
@@ -200,9 +279,51 @@ async function loadSlots() {
 }
 
 async function refreshLists() {
+  await loadPsychologists();
   await loadSlots();
   await loadBookings();
 }
+
+elements.psychologistForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  clearFeedback(elements.psychologistFormFeedback);
+  const payload = Object.fromEntries(new FormData(elements.psychologistForm).entries());
+
+  try {
+    await api("./api/admin/psychologists", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    elements.psychologistForm.reset();
+    elements.psychologistForm.elements.is_active.value = "true";
+    showFeedback(elements.psychologistFormFeedback, "Психолог добавлен.", "success");
+    await refreshLists();
+  } catch (error) {
+    showFeedback(elements.psychologistFormFeedback, buildErrorMessage(error) || "Не удалось добавить психолога.");
+  }
+});
+
+elements.psychologistsList.addEventListener("submit", async (event) => {
+  const form = event.target.closest("[data-psychologist-form]");
+  if (!form) {
+    return;
+  }
+
+  event.preventDefault();
+  clearFeedback(elements.psychologistFormFeedback);
+  const payload = Object.fromEntries(new FormData(form).entries());
+
+  try {
+    await api(`./api/admin/psychologists/${form.dataset.psychologistId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    });
+    showFeedback(elements.psychologistFormFeedback, "Психолог обновлен.", "success");
+    await refreshLists();
+  } catch (error) {
+    showFeedback(elements.psychologistFormFeedback, buildErrorMessage(error) || "Не удалось обновить психолога.");
+  }
+});
 
 elements.slotForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -218,7 +339,7 @@ elements.slotForm.addEventListener("submit", async (event) => {
     showFeedback(elements.slotFormFeedback, "Слот создан.", "success");
     await refreshLists();
   } catch (error) {
-    showFeedback(elements.slotFormFeedback, error.message || "Не удалось создать слот.");
+    showFeedback(elements.slotFormFeedback, buildErrorMessage(error) || "Не удалось создать слот.");
   }
 });
 
@@ -263,7 +384,7 @@ elements.bookingsList.addEventListener("change", async (event) => {
 
     await refreshLists();
   } catch (error) {
-    showFeedback(elements.bookingsFeedback, error.message || "Не удалось обновить заявку.");
+    showFeedback(elements.bookingsFeedback, buildErrorMessage(error) || "Не удалось обновить заявку.");
   }
 });
 
@@ -293,7 +414,7 @@ elements.bookingsList.addEventListener("click", async (event) => {
 
     await refreshLists();
   } catch (error) {
-    showFeedback(elements.bookingsFeedback, error.message || "Не удалось обновить заявку.");
+    showFeedback(elements.bookingsFeedback, buildErrorMessage(error) || "Не удалось обновить заявку.");
   }
 });
 
@@ -310,14 +431,27 @@ elements.slotsList.addEventListener("click", async (event) => {
     showFeedback(elements.slotsFeedback, "Слот удален.", "success");
     await refreshLists();
   } catch (error) {
-    showFeedback(elements.slotsFeedback, error.message || "Не удалось удалить слот.");
+    showFeedback(elements.slotsFeedback, buildErrorMessage(error) || "Не удалось удалить слот.");
   }
 });
 
 async function bootstrap() {
   await loadMeta();
-  state.currentSlots = [];
   await refreshLists();
+}
+
+function buildErrorMessage(error) {
+  const details = error.details ? Object.values(error.details).join(" ") : "";
+  return [error.message, details].filter(Boolean).join(" ");
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 bootstrap().catch((error) => {
