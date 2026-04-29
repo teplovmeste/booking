@@ -29,6 +29,12 @@ async function api(path, options = {}) {
   });
   const payload = await response.json();
 
+  if (response.status === 401) {
+    const loginPath = window.location.pathname.replace(/\/admin\/?$/, "/admin/login");
+    window.location.href = loginPath;
+    throw { message: "Сессия администратора истекла." };
+  }
+
   if (!response.ok) {
     throw payload.error || { message: "Не удалось выполнить запрос." };
   }
@@ -121,7 +127,7 @@ function renderPsychologists(items) {
               <h3>${psychologist.name}</h3>
               <p>${psychologist.age_categories_label}</p>
             </div>
-            <span class="status-pill">${psychologist.is_active ? "Активен" : "Выключен"}</span>
+            <span class="status-pill" data-status-pill>${psychologist.is_active ? "Активен" : "Выключен"}</span>
           </div>
           <form class="admin-form compact-form" data-psychologist-form data-psychologist-id="${psychologist.id}">
             <div class="admin-card__grid">
@@ -155,6 +161,17 @@ function renderPsychologists(items) {
       `
     )
     .join("");
+}
+
+function syncPsychologistStatusPreview(form) {
+  const statusPill = form.closest(".admin-card")?.querySelector("[data-status-pill]");
+  const selectedValue = form.elements.is_active?.value;
+
+  if (!statusPill || !selectedValue) {
+    return;
+  }
+
+  statusPill.textContent = selectedValue === "true" ? "Активен" : "Выключен";
 }
 
 function renderBookings(items) {
@@ -348,6 +365,15 @@ elements.psychologistsList.addEventListener("submit", async (event) => {
   } catch (error) {
     showFeedback(elements.psychologistFormFeedback, buildErrorMessage(error) || "Не удалось обновить психолога.");
   }
+});
+
+elements.psychologistsList.addEventListener("change", (event) => {
+  const form = event.target.closest("[data-psychologist-form]");
+  if (!form || event.target.name !== "is_active") {
+    return;
+  }
+
+  syncPsychologistStatusPreview(form);
 });
 
 elements.slotForm.addEventListener("submit", async (event) => {

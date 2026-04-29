@@ -195,6 +195,27 @@ export function readJsonBody(req) {
   });
 }
 
+export function readFormBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 1024 * 1024) {
+        reject(new AppError(413, "PAYLOAD_TOO_LARGE", "Слишком большой запрос."));
+        req.destroy();
+      }
+    });
+
+    req.on("end", () => {
+      const params = new URLSearchParams(body);
+      resolve(Object.fromEntries(params.entries()));
+    });
+
+    req.on("error", (error) => reject(error));
+  });
+}
+
 export function sendJson(res, status, payload) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",

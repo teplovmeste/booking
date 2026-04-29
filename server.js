@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
   ADMIN_BASIC_AUTH_PASS,
@@ -12,13 +13,15 @@ import {
 } from "./src/config.js";
 import { createRepository } from "./src/db.js";
 import { sendBookingNotifications } from "./src/email.js";
-import { getStaticFile, isStaticMethod, stripBasePath } from "./src/http-routing.js";
+import { getStaticFile, isStaticMethod, ROOT_STATIC_ASSETS, stripBasePath } from "./src/http-routing.js";
 import { createBookingModule } from "./src/module.js";
-import { AppError, handleRouteError, notFound, readJsonBody, sendJson } from "./src/utils.js";
+import { AppError, handleRouteError, notFound, readFormBody, readJsonBody, sendJson } from "./src/utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = __dirname;
+const ADMIN_SESSION_COOKIE = "teplovmeste_admin_session";
+const ADMIN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const shouldSeedDemoData = AUTO_SEED_DEMO_DATA === null ? !DATABASE_URL : AUTO_SEED_DEMO_DATA;
 const repository = await createRepository({
@@ -32,6 +35,15 @@ const moduleApi = createBookingModule({
 
 async function routeRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  const directStaticFile = isStaticMethod(req.method) && ROOT_STATIC_ASSETS.has(url.pathname)
+    ? getStaticFile(url.pathname)
+    : null;
+
+  if (directStaticFile) {
+    serveStaticFile(req, res, directStaticFile);
+    return;
+  }
+
   const pathname = stripBasePath(url.pathname, BASE_PATH);
 
   if (pathname === null) {
@@ -39,29 +51,40 @@ async function routeRequest(req, res) {
     return;
   }
 
-  if (isProtectedAdminPath(pathname) && !enforceAdminAuth(req, res)) {
+  if (req.method === "GET" && pathname === "/admin/login") {
+    if (isAdminSessionValid(req)) {
+      redirect(res, toAppPath("/admin"));
+      return;
+    }
+  }
+
+  if (req.method === "POST" && pathname === "/admin/login") {
+    const payload = await readFormBody(req);
+
+    if (payload.username === ADMIN_BASIC_AUTH_USER && payload.password === ADMIN_BASIC_AUTH_PASS) {
+      writeAdminSessionCookie(req, res, payload.username);
+      redirect(res, toAppPath("/admin"));
+      return;
+    }
+
+    redirect(res, `${toAppPath("/admin/login")}?error=1`);
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/admin/logout") {
+    clearAdminSessionCookie(req, res);
+    redirect(res, `${toAppPath("/admin/login")}?logged_out=1`);
+    return;
+  }
+
+  if (isProtectedAdminPath(pathname) && !enforceAdminAuth(req, res, pathname)) {
     return;
   }
 
   if (isStaticMethod(req.method)) {
     const staticFile = getStaticFile(pathname);
     if (staticFile) {
-      const [fileName, contentType] = staticFile;
-      const fullPath = path.join(rootDir, fileName);
-      const fileBuffer = fs.readFileSync(fullPath);
-
-      res.writeHead(200, {
-        "Content-Type": contentType,
-        "Content-Length": fileBuffer.byteLength,
-        "Cache-Control": "no-store"
-      });
-
-      if (req.method === "HEAD") {
-        res.end();
-        return;
-      }
-
-      res.end(fileBuffer);
+      serveStaticFile(req, res, staticFile);
       return;
     }
   }
@@ -192,6 +215,31 @@ async function routeRequest(req, res) {
   notFound(res);
 }
 
+function serveStaticFile(req, res, staticFile) {
+  const [fileName, contentType] = staticFile;
+  const fullPath = path.join(rootDir, fileName);
+
+  if (!fs.existsSync(fullPath)) {
+    notFound(res);
+    return;
+  }
+
+  const fileBuffer = fs.readFileSync(fullPath);
+
+  res.writeHead(200, {
+    "Content-Type": contentType,
+    "Content-Length": fileBuffer.byteLength,
+    "Cache-Control": "no-store"
+  });
+
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+
+  res.end(fileBuffer);
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     await routeRequest(req, res);
@@ -228,44 +276,142 @@ function isProtectedAdminPath(pathname) {
   return pathname === "/admin" || pathname === "/admin.html" || pathname.startsWith("/api/admin");
 }
 
-function enforceAdminAuth(req, res) {
+function enforceAdminAuth(req, res, pathname) {
   if (!ADMIN_BASIC_AUTH_USER || !ADMIN_BASIC_AUTH_PASS) {
     return true;
   }
 
-  const header = req.headers.authorization || "";
-  const [scheme, encoded] = header.split(" ");
-
-  if (scheme !== "Basic" || !encoded) {
-    writeUnauthorized(res);
-    return false;
-  }
-
-  const decoded = Buffer.from(encoded, "base64").toString("utf8");
-  const separatorIndex = decoded.indexOf(":");
-  const username = separatorIndex >= 0 ? decoded.slice(0, separatorIndex) : "";
-  const password = separatorIndex >= 0 ? decoded.slice(separatorIndex + 1) : "";
-
-  if (username !== ADMIN_BASIC_AUTH_USER || password !== ADMIN_BASIC_AUTH_PASS) {
-    writeUnauthorized(res);
+  if (!isAdminSessionValid(req)) {
+    writeUnauthorized(req, res, pathname);
     return false;
   }
 
   return true;
 }
 
-function writeUnauthorized(res) {
-  res.writeHead(401, {
-    "Content-Type": "application/json; charset=utf-8",
-    "WWW-Authenticate": 'Basic realm="Teplovmeste Admin"'
-  });
-  res.end(
-    JSON.stringify({
+function writeUnauthorized(req, res, pathname) {
+  if (pathname.startsWith("/api/admin")) {
+    sendJson(res, 401, {
       ok: false,
       error: {
         code: "UNAUTHORIZED",
         message: "Требуется авторизация администратора."
       }
-    })
-  );
+    });
+    return;
+  }
+
+  redirect(res, toAppPath("/admin/login"));
+}
+
+function isAdminSessionValid(req) {
+  const sessionCookie = readCookie(req, ADMIN_SESSION_COOKIE);
+  if (!sessionCookie) {
+    return false;
+  }
+
+  return verifyAdminSessionToken(sessionCookie);
+}
+
+function createAdminSessionToken(username) {
+  const expiresAt = Date.now() + ADMIN_SESSION_TTL_MS;
+  const payload = `${username}:${expiresAt}`;
+  const signature = signAdminSessionPayload(payload);
+  return `${Buffer.from(payload, "utf8").toString("base64url")}.${signature}`;
+}
+
+function verifyAdminSessionToken(token) {
+  const [encodedPayload, providedSignature] = String(token || "").split(".");
+  if (!encodedPayload || !providedSignature) {
+    return false;
+  }
+
+  let payload = "";
+
+  try {
+    payload = Buffer.from(encodedPayload, "base64url").toString("utf8");
+  } catch {
+    return false;
+  }
+
+  const expectedSignature = signAdminSessionPayload(payload);
+  const providedBuffer = Buffer.from(providedSignature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+
+  if (providedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
+    return false;
+  }
+
+  const [username, expiresAtRaw] = payload.split(":");
+  const expiresAt = Number(expiresAtRaw);
+
+  return username === ADMIN_BASIC_AUTH_USER && Number.isFinite(expiresAt) && expiresAt > Date.now();
+}
+
+function signAdminSessionPayload(payload) {
+  return crypto
+    .createHmac("sha256", `${ADMIN_BASIC_AUTH_USER}:${ADMIN_BASIC_AUTH_PASS}`)
+    .update(payload)
+    .digest("base64url");
+}
+
+function writeAdminSessionCookie(req, res, username) {
+  const token = createAdminSessionToken(username);
+  writeCookie(res, `${ADMIN_SESSION_COOKIE}=${token}`, req);
+}
+
+function clearAdminSessionCookie(req, res) {
+  writeCookie(res, `${ADMIN_SESSION_COOKIE}=; Max-Age=0`, req);
+}
+
+function writeCookie(res, baseValue, req) {
+  const parts = [
+    baseValue,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax"
+  ];
+
+  if (isSecureRequest(req)) {
+    parts.push("Secure");
+  }
+
+  if (!baseValue.includes("Max-Age=0")) {
+    parts.push(`Max-Age=${Math.floor(ADMIN_SESSION_TTL_MS / 1000)}`);
+  }
+
+  const existing = res.getHeader("Set-Cookie");
+  const nextValue = parts.join("; ");
+
+  if (!existing) {
+    res.setHeader("Set-Cookie", nextValue);
+    return;
+  }
+
+  res.setHeader("Set-Cookie", Array.isArray(existing) ? [...existing, nextValue] : [existing, nextValue]);
+}
+
+function readCookie(req, name) {
+  const cookieHeader = req.headers.cookie || "";
+  const parts = cookieHeader.split(";").map((item) => item.trim()).filter(Boolean);
+  const target = `${name}=`;
+  const cookie = parts.find((item) => item.startsWith(target));
+  return cookie ? cookie.slice(target.length) : "";
+}
+
+function isSecureRequest(req) {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").toLowerCase();
+  return forwardedProto.includes("https");
+}
+
+function toAppPath(pathname) {
+  return `${BASE_PATH}${pathname}` || pathname;
+}
+
+function redirect(res, location) {
+  res.writeHead(302, {
+    Location: location,
+    "Cache-Control": "no-store"
+  });
+  res.end();
 }
