@@ -88,6 +88,9 @@ export function normalizeOptionalDate(value) {
 
 export function validateBookingPayload(payload) {
   const errors = {};
+  const hasSlotSelection = Number.isInteger(Number(payload.slot_id)) && Number(payload.slot_id) > 0;
+  const preferredTime = cleanString(payload.preferred_time);
+  const psychologistIdRaw = cleanString(payload.psychologist_id);
   const requiredStringFields = [
     ["parent_name", "Укажите имя родителя."],
     ["parent_email", "Укажите email."],
@@ -106,8 +109,12 @@ export function validateBookingPayload(payload) {
     }
   }
 
-  if (!Number.isInteger(Number(payload.slot_id)) || Number(payload.slot_id) <= 0) {
-    errors.slot_id = "Выберите слот.";
+  if (!hasSlotSelection && !preferredTime) {
+    errors.preferred_time = "Укажите удобное время для консультации, если слот не выбран.";
+  }
+
+  if (psychologistIdRaw && (!Number.isInteger(Number(psychologistIdRaw)) || Number(psychologistIdRaw) <= 0)) {
+    errors.psychologist_id = "Выберите корректного психолога.";
   }
 
   if (!isValidEmail(payload.parent_email)) {
@@ -153,6 +160,8 @@ export function validateBookingPayload(payload) {
       preferred_contact_method: cleanString(payload.preferred_contact_method),
       accept_terms: isChecked(payload.accept_terms),
       accept_privacy: isChecked(payload.accept_privacy),
+      psychologist_id: psychologistIdRaw ? Number(psychologistIdRaw) : null,
+      preferred_time: preferredTime,
       age_category: cleanString(payload.age_category)
     }
   };

@@ -1,9 +1,9 @@
 const state = {
   categories: [],
   contactMethods: [],
-  contactEmail: "",
   selectedCategory: null,
   selectedSlot: null,
+  fallbackPsychologist: null,
   successMessage: ""
 };
 
@@ -11,6 +11,12 @@ const elements = {
   categoryGrid: document.getElementById("category-grid"),
   categoryEmpty: document.getElementById("category-empty"),
   psychologistsList: document.getElementById("psychologists-list"),
+  stepTwoSection: document.getElementById("booking-step-2"),
+  stepThreeSection: document.getElementById("booking-step-3"),
+  fallbackRequest: document.getElementById("fallback-request"),
+  fallbackRequestSummary: document.getElementById("fallback-request-summary"),
+  fallbackPreferredTimeInput: document.getElementById("fallback-preferred-time-input"),
+  fallbackRequestContinue: document.getElementById("fallback-request-continue"),
   bookingForm: document.getElementById("booking-form"),
   formFeedback: document.getElementById("form-feedback"),
   selectedSlotSummary: document.getElementById("selected-slot-summary"),
@@ -46,9 +52,13 @@ function clearFeedback(target) {
   target.className = "feedback hidden";
 }
 
-function buildContactLink(subject, body) {
-  const params = new URLSearchParams({ subject, body });
-  return `mailto:${state.contactEmail}?${params.toString()}`;
+function scrollToSection(element) {
+  if (!element) return;
+
+  const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  window.requestAnimationFrame(() => {
+    element.scrollIntoView({ behavior, block: "start" });
+  });
 }
 
 function renderCategoryEmpty() {
@@ -57,17 +67,43 @@ function renderCategoryEmpty() {
   elements.categoryEmpty.innerHTML = `
     <div class="contact-fallback">
       <p>Для категории <strong>${categoryLabel}</strong> сейчас нет доступных слотов.</p>
-      <a
-        class="button-secondary"
-        href="${buildContactLink(
-          `Нет слотов в категории ${categoryLabel}`,
-          `Здравствуйте!\n\nСейчас в категории ${categoryLabel} нет свободных слотов. Помогите, пожалуйста, подобрать запись или предложить альтернативу.`
-        )}"
-      >
-        Связаться с нами
-      </a>
+      <button class="button-secondary" type="button" data-fallback-category>
+        Оставить заявку без выбранного слота
+      </button>
     </div>
   `;
+}
+
+function hideFallbackRequest() {
+  state.fallbackPsychologist = null;
+  elements.fallbackRequest.classList.add("hidden");
+  elements.fallbackPreferredTimeInput.value = "";
+  elements.bookingForm.elements.preferred_time.value = "";
+  elements.bookingForm.elements.psychologist_id.value = "";
+}
+
+function openFallbackRequest({ psychologistId = "", psychologistName = "" } = {}) {
+  state.selectedSlot = null;
+  state.fallbackPsychologist = psychologistId ? { id: String(psychologistId), name: psychologistName } : null;
+  elements.bookingForm.classList.add("hidden");
+  elements.bookingForm.elements.slot_id.value = "";
+  elements.bookingForm.elements.psychologist_id.value = psychologistId ? String(psychologistId) : "";
+  elements.bookingForm.elements.preferred_time.value = "";
+  elements.fallbackPreferredTimeInput.value = "";
+  elements.successCard.classList.add("hidden");
+
+  const categoryLabel = state.categories.find((item) => item.value === state.selectedCategory)?.label || "выбранной категории";
+  elements.fallbackRequestSummary.textContent = psychologistName
+    ? `У психолога ${psychologistName} сейчас нет свободных слотов. Напишите, когда вам было бы удобно.`
+    : `Для категории ${categoryLabel} сейчас нет свободных слотов. Напишите, когда вам было бы удобно.`;
+
+  elements.selectedSlotSummary.textContent = psychologistName
+    ? `Слот не выбран. Мы попробуем подобрать время у психолога ${psychologistName}.`
+    : "Слот не выбран. Мы попробуем подобрать удобное время для консультации.";
+
+  elements.fallbackRequest.classList.remove("hidden");
+  scrollToSection(elements.stepTwoSection);
+  elements.fallbackPreferredTimeInput.focus();
 }
 
 function renderCategories() {
@@ -96,6 +132,9 @@ function renderPsychologists(data) {
   elements.categoryEmpty.classList.toggle("hidden", hasAnySlots);
   if (!hasAnySlots) {
     renderCategoryEmpty();
+    openFallbackRequest();
+  } else if (!state.fallbackPsychologist) {
+    elements.fallbackRequest.classList.add("hidden");
   }
 
   elements.psychologistsList.innerHTML = data.psychologists
@@ -113,15 +152,14 @@ function renderPsychologists(data) {
         : `
           <div class="contact-fallback">
             <p class="muted-line">Сейчас свободных слотов нет.</p>
-            <a
+            <button
               class="button-secondary"
-              href="${buildContactLink(
-                `Нет слотов: ${psychologist.name}`,
-                `Здравствуйте!\n\nСейчас у психолога ${psychologist.name} нет свободных слотов. Подскажите, пожалуйста, можно ли предложить альтернативу или лист ожидания?`
-              )}"
+              type="button"
+              data-fallback-psychologist-id="${psychologist.id}"
+              data-fallback-psychologist-name="${psychologist.name}"
             >
-              Связаться с нами
-            </a>
+              Оставить заявку без выбранного слота
+            </button>
           </div>
         `;
 
@@ -142,10 +180,15 @@ function renderPsychologists(data) {
 
 function setSelectedSlot(slot) {
   state.selectedSlot = slot;
+  state.fallbackPsychologist = null;
+  elements.fallbackRequest.classList.add("hidden");
   elements.bookingForm.classList.remove("hidden");
   elements.bookingForm.elements.slot_id.value = String(slot.id);
+  elements.bookingForm.elements.psychologist_id.value = "";
+  elements.bookingForm.elements.preferred_time.value = "";
   elements.bookingForm.elements.age_category.value = state.selectedCategory;
   elements.selectedSlotSummary.textContent = `Выбран слот: ${slot.label} — ${slot.psychologistName}.`;
+  scrollToSection(elements.stepThreeSection);
   renderCategories();
   loadAvailability(state.selectedCategory);
 }
@@ -164,13 +207,25 @@ async function loadAvailability(ageCategory) {
       });
     });
   });
+
+  elements.psychologistsList.querySelectorAll("[data-fallback-psychologist-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openFallbackRequest({
+        psychologistId: button.dataset.fallbackPsychologistId,
+        psychologistName: button.dataset.fallbackPsychologistName
+      });
+    });
+  });
+
+  elements.categoryEmpty.querySelector("[data-fallback-category]")?.addEventListener("click", () => {
+    openFallbackRequest();
+  });
 }
 
 async function bootstrap() {
   const meta = await api("./api/public/meta");
   state.categories = meta.categories;
   state.contactMethods = meta.contact_methods || [];
-  state.contactEmail = meta.contact_email || "support@teplovmeste.com";
   state.successMessage = meta.success_message;
   state.selectedCategory = meta.categories[0]?.value || null;
 
@@ -182,6 +237,7 @@ async function bootstrap() {
 
     state.selectedCategory = button.dataset.category;
     state.selectedSlot = null;
+    hideFallbackRequest();
     elements.bookingForm.reset();
     elements.bookingForm.classList.add("hidden");
     elements.successCard.classList.add("hidden");
@@ -194,6 +250,26 @@ async function bootstrap() {
     await loadAvailability(state.selectedCategory);
   }
 }
+
+elements.fallbackRequestContinue.addEventListener("click", () => {
+  clearFeedback(elements.formFeedback);
+  const preferredTime = elements.fallbackPreferredTimeInput.value.trim();
+
+  if (!preferredTime) {
+    showFeedback(elements.formFeedback, "Укажите удобное время для консультации.");
+    return;
+  }
+
+  elements.bookingForm.classList.remove("hidden");
+  elements.bookingForm.elements.slot_id.value = "";
+  elements.bookingForm.elements.psychologist_id.value = state.fallbackPsychologist?.id || "";
+  elements.bookingForm.elements.preferred_time.value = preferredTime;
+  elements.bookingForm.elements.age_category.value = state.selectedCategory;
+  elements.selectedSlotSummary.textContent = state.fallbackPsychologist
+    ? `Слот не выбран. Предпочтительное время: ${preferredTime}. Психолог: ${state.fallbackPsychologist.name}.`
+    : `Слот не выбран. Предпочтительное время: ${preferredTime}.`;
+  scrollToSection(elements.stepThreeSection);
+});
 
 elements.bookingForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -211,6 +287,7 @@ elements.bookingForm.addEventListener("submit", async (event) => {
     elements.bookingForm.reset();
     elements.bookingForm.classList.add("hidden");
     state.selectedSlot = null;
+    hideFallbackRequest();
     elements.successCard.classList.remove("hidden");
     elements.successMessage.textContent = state.successMessage;
     elements.successWarning.classList.add("hidden");

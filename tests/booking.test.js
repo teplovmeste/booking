@@ -58,6 +58,16 @@ function validBookingPayload(slotId, ageCategory) {
   };
 }
 
+function validNoSlotPayload(ageCategory, overrides = {}) {
+  return {
+    ...validBookingPayload("", ageCategory),
+    slot_id: "",
+    psychologist_id: "",
+    preferred_time: "По будням после 20:00",
+    ...overrides
+  };
+}
+
 test("admin can create slot", async () => {
   const { moduleApi } = await createTestModule();
   const meta = await moduleApi.getAdminMeta();
@@ -185,6 +195,17 @@ test("booking can be created when parent selected not important", async () => {
   assert.equal(slot.status, "booked");
 });
 
+test("booking can be created without selected slot when preferred time is provided", async () => {
+  const { moduleApi } = await createTestModule();
+
+  const result = await moduleApi.createBooking(validNoSlotPayload("preschool"));
+
+  assert.equal(result.booking.slot_id, null);
+  assert.equal(result.booking.psychologist_id, null);
+  assert.equal(result.booking.preferred_time, "По будням после 20:00");
+  assert.equal(result.booking.slot_starts_at_label, "Слот не назначен");
+});
+
 test("repeat booking for same slot is impossible", async () => {
   const { repository, moduleApi } = await createTestModule();
   const slotId = (await getFirstAvailableSlotForCategory(repository, "teens")).id;
@@ -285,13 +306,13 @@ test("invalid booking payload is rejected with field details", async () => {
   await assert.rejects(
     () =>
       moduleApi.createBooking({
-      ...validBookingPayload(slotId, "teens"),
-      parent_email: "broken-email",
-      child_age: "",
-      request_text: "",
-      accept_terms: "",
-      accept_privacy: ""
-    }),
+        ...validBookingPayload(slotId, "teens"),
+        parent_email: "broken-email",
+        child_age: "",
+        request_text: "",
+        accept_terms: "",
+        accept_privacy: ""
+      }),
     (error) => {
       assert.equal(error.code, "INVALID_BOOKING_FORM");
       assert.equal(error.details.parent_email, "Укажите корректный email.");
@@ -299,6 +320,19 @@ test("invalid booking payload is rejected with field details", async () => {
       assert.equal(error.details.request_text, "Опишите краткий запрос.");
       assert.equal(error.details.accept_terms, "Нужно принять условия оказания услуг.");
       assert.equal(error.details.accept_privacy, "Нужно согласиться на обработку персональных данных.");
+      return true;
+    }
+  );
+});
+
+test("booking without slot requires preferred time", async () => {
+  const { moduleApi } = await createTestModule();
+
+  await assert.rejects(
+    () => moduleApi.createBooking(validNoSlotPayload("teens", { preferred_time: "" })),
+    (error) => {
+      assert.equal(error.code, "INVALID_BOOKING_FORM");
+      assert.equal(error.details.preferred_time, "Укажите удобное время для консультации, если слот не выбран.");
       return true;
     }
   );

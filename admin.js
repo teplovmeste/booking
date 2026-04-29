@@ -213,6 +213,7 @@ function renderBookings(items) {
           </div>
           <div class="admin-card__grid">
             <p><strong>Категория:</strong> ${booking.age_category_label}</p>
+            <p><strong>Удобное время:</strong> ${booking.preferred_time || "Не указано"}</p>
             <p><strong>Ребенок:</strong> ${booking.child_name}, ${booking.child_age}</p>
             <p><strong>Email:</strong> ${booking.parent_email}</p>
             <p><strong>Телефон:</strong> ${booking.parent_phone}</p>

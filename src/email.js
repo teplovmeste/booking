@@ -112,8 +112,8 @@ function composeBookingBody({ booking, psychologist, slot }) {
   return [
     "Новая заявка на консультацию",
     "",
-    `Дата и время слота: ${formatMoscowDateTime(slot.starts_at)}`,
-    `Психолог: ${psychologist.name}`,
+    `Дата и время слота: ${slot?.starts_at ? formatMoscowDateTime(slot.starts_at) : "Слот не выбран"}`,
+    `Психолог: ${psychologist?.name || "Психолог не выбран"}`,
     `Возрастная категория: ${getCategoryLabel(booking.age_category)}`,
     `Имя родителя: ${booking.parent_name}`,
     `Email: ${booking.parent_email}`,
@@ -122,6 +122,7 @@ function composeBookingBody({ booking, psychologist, slot }) {
     `Имя ребенка: ${booking.child_name}`,
     `Возраст ребенка: ${booking.child_age}`,
     `Страна: ${booking.country}`,
+    `Удобное время для консультации: ${booking.preferred_time || "Не указано"}`,
     `Краткий запрос: ${booking.request_text}`,
     `Предпочтительный способ связи: ${getContactMethodLabel(booking.preferred_contact_method)}`,
     `Статус заявки: ${getBookingStatusLabel(booking.status)}`
@@ -130,7 +131,9 @@ function composeBookingBody({ booking, psychologist, slot }) {
 
 export async function sendBookingNotifications(context) {
   const body = composeBookingBody(context);
-  const subject = `Новая запись: ${context.psychologist.name} / ${formatMoscowDateTime(context.slot.starts_at)}`;
+  const subject = context.slot?.starts_at
+    ? `Новая запись: ${context.psychologist?.name || "Без психолога"} / ${formatMoscowDateTime(context.slot.starts_at)}`
+    : `Новая заявка без слота: ${getCategoryLabel(context.booking.age_category)}`;
 
   try {
     await sendEmail({
@@ -139,11 +142,13 @@ export async function sendBookingNotifications(context) {
       text: body
     });
 
-    await sendEmail({
-      to: context.psychologist.email,
-      subject,
-      text: body
-    });
+    if (context.psychologist?.email) {
+      await sendEmail({
+        to: context.psychologist.email,
+        subject,
+        text: body
+      });
+    }
 
     return { ok: true };
   } catch (error) {

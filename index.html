@@ -44,15 +44,36 @@
           <div class="empty-state hidden" id="category-empty"></div>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="booking-step-2">
           <div class="section-heading">
             <p class="eyebrow">Шаг 2</p>
             <h2>Выберите психолога и слот</h2>
           </div>
           <div class="psychologists-list" id="psychologists-list"></div>
+          <div class="fallback-request hidden" id="fallback-request">
+            <div class="section-heading">
+              <p class="eyebrow">Без слота</p>
+              <h3>Удобное время для консультации</h3>
+              <p class="section-text" id="fallback-request-summary"></p>
+            </div>
+            <div class="fallback-request__controls">
+              <label class="form-full">
+                <span>Когда вам было бы удобно?</span>
+                <input
+                  id="fallback-preferred-time-input"
+                  name="fallback_preferred_time"
+                  type="text"
+                  placeholder="Например: по будням после 20:00"
+                />
+              </label>
+              <button class="button-secondary" id="fallback-request-continue" type="button">
+                Продолжить без выбранного слота
+              </button>
+            </div>
+          </div>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="booking-step-3">
           <div class="section-heading">
             <p class="eyebrow">Шаг 3</p>
             <h2>Заполните форму</h2>
@@ -126,7 +147,9 @@
             </div>
 
             <input name="slot_id" type="hidden" />
+            <input name="psychologist_id" type="hidden" />
             <input name="age_category" type="hidden" />
+            <input name="preferred_time" type="hidden" />
 
             <button class="button-primary" type="submit">Отправить заявку</button>
           </form>

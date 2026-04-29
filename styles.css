@@ -224,6 +224,7 @@ h3 {
   display: grid;
   gap: 20px;
   padding: 28px;
+  scroll-margin-top: 24px;
   border-radius: var(--radius-xl);
   border: 1px solid var(--line);
   background: var(--surface);
@@ -332,6 +333,20 @@ h3 {
 
 .contact-fallback .button-secondary {
   justify-self: start;
+}
+
+.fallback-request {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px dashed rgba(70, 61, 47, 0.22);
+  border-radius: var(--radius-lg);
+  background: #fff8ef;
+}
+
+.fallback-request__controls {
+  display: grid;
+  gap: 14px;
 }
 
 .slot-button {

@@ -41,8 +41,8 @@ const SQLITE_SCHEMA_SQL = `
 
   CREATE TABLE IF NOT EXISTS bookings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    slot_id INTEGER NOT NULL REFERENCES slots(id),
-    psychologist_id INTEGER NOT NULL REFERENCES psychologists(id),
+    slot_id INTEGER REFERENCES slots(id),
+    psychologist_id INTEGER REFERENCES psychologists(id),
     age_category TEXT NOT NULL,
     parent_name TEXT NOT NULL,
     parent_email TEXT NOT NULL,
@@ -52,6 +52,7 @@ const SQLITE_SCHEMA_SQL = `
     child_age TEXT NOT NULL,
     country TEXT NOT NULL,
     request_text TEXT NOT NULL,
+    preferred_time TEXT,
     preferred_contact_method TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('new', 'awaiting_payment', 'confirmed', 'cancelled', 'completed')),
     created_at TEXT NOT NULL,
@@ -94,8 +95,8 @@ export const POSTGRES_SCHEMA_SQL = `
 
   CREATE TABLE IF NOT EXISTS bookings (
     id BIGSERIAL PRIMARY KEY,
-    slot_id BIGINT NOT NULL REFERENCES slots(id),
-    psychologist_id BIGINT NOT NULL REFERENCES psychologists(id),
+    slot_id BIGINT REFERENCES slots(id),
+    psychologist_id BIGINT REFERENCES psychologists(id),
     age_category TEXT NOT NULL,
     parent_name TEXT NOT NULL,
     parent_email TEXT NOT NULL,
@@ -105,6 +106,7 @@ export const POSTGRES_SCHEMA_SQL = `
     child_age TEXT NOT NULL,
     country TEXT NOT NULL,
     request_text TEXT NOT NULL,
+    preferred_time TEXT,
     preferred_contact_method TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('new', 'awaiting_payment', 'confirmed', 'cancelled', 'completed')),
     created_at TIMESTAMPTZ NOT NULL,
@@ -285,7 +287,7 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
       s.timezone AS slot_timezone,
       s.status AS slot_status
     FROM bookings b
-    JOIN psychologists p ON p.id = b.psychologist_id
+    LEFT JOIN psychologists p ON p.id = b.psychologist_id
     LEFT JOIN slots s ON s.id = b.slot_id
   `;
 
@@ -306,6 +308,85 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
         update.run(serialized, Number(row.id));
       }
     }
+  }
+
+  function ensureSqliteBookingRequestSupport() {
+    const columns = db.prepare("PRAGMA table_info(bookings)").all();
+    const slotColumn = columns.find((column) => column.name === "slot_id");
+    const psychologistColumn = columns.find((column) => column.name === "psychologist_id");
+    const hasPreferredTimeColumn = columns.some((column) => column.name === "preferred_time");
+    const needsRebuild = !hasPreferredTimeColumn || slotColumn?.notnull === 1 || psychologistColumn?.notnull === 1;
+
+    if (!needsRebuild) {
+      return;
+    }
+
+    db.exec(`
+      CREATE TABLE bookings_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slot_id INTEGER REFERENCES slots(id),
+        psychologist_id INTEGER REFERENCES psychologists(id),
+        age_category TEXT NOT NULL,
+        parent_name TEXT NOT NULL,
+        parent_email TEXT NOT NULL,
+        parent_phone TEXT NOT NULL,
+        parent_telegram TEXT NOT NULL,
+        child_name TEXT NOT NULL,
+        child_age TEXT NOT NULL,
+        country TEXT NOT NULL,
+        request_text TEXT NOT NULL,
+        preferred_time TEXT,
+        preferred_contact_method TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('new', 'awaiting_payment', 'confirmed', 'cancelled', 'completed')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT INTO bookings_new (
+        id,
+        slot_id,
+        psychologist_id,
+        age_category,
+        parent_name,
+        parent_email,
+        parent_phone,
+        parent_telegram,
+        child_name,
+        child_age,
+        country,
+        request_text,
+        preferred_time,
+        preferred_contact_method,
+        status,
+        created_at,
+        updated_at
+      )
+      SELECT
+        id,
+        slot_id,
+        psychologist_id,
+        age_category,
+        parent_name,
+        parent_email,
+        parent_phone,
+        parent_telegram,
+        child_name,
+        child_age,
+        country,
+        request_text,
+        NULL,
+        preferred_contact_method,
+        status,
+        created_at,
+        updated_at
+      FROM bookings;
+
+      DROP TABLE bookings;
+      ALTER TABLE bookings_new RENAME TO bookings;
+
+      CREATE INDEX IF NOT EXISTS idx_bookings_filters
+        ON bookings(status, psychologist_id, created_at);
+    `);
   }
 
   function countRows(tableName) {
@@ -354,6 +435,7 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
   }
 
   ensureSqlitePsychologistCategoryStorage();
+  ensureSqliteBookingRequestSupport();
   seedIfEmpty();
 
   const repository = {
@@ -458,14 +540,15 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
             child_age,
             country,
             request_text,
+            preferred_time,
             preferred_contact_method,
             status,
             created_at,
             updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)
         `)
         .run(
-          payload.slot_id,
+          payload.slot_id ?? null,
           payload.psychologist_id,
           payload.age_category,
           payload.parent_name,
@@ -476,6 +559,7 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
           payload.child_age,
           payload.country,
           payload.request_text,
+          payload.preferred_time || null,
           payload.preferred_contact_method,
           timestamp,
           timestamp
@@ -675,6 +759,9 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
     WHERE age_categories IS NULL OR age_categories = ''
   `);
   await execute("ALTER TABLE bookings ALTER COLUMN child_age TYPE TEXT USING child_age::text");
+  await execute("ALTER TABLE bookings ALTER COLUMN slot_id DROP NOT NULL");
+  await execute("ALTER TABLE bookings ALTER COLUMN psychologist_id DROP NOT NULL");
+  await execute("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS preferred_time TEXT");
 
   if (seedDemoData && (await countRows("psychologists")) === 0) {
     const timestamp = nowProvider().toISOString();
@@ -873,15 +960,16 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
               child_age,
               country,
               request_text,
+              preferred_time,
               preferred_contact_method,
               status,
               created_at,
               updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'new', $13, $13)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'new', $14, $14)
             RETURNING id
           `,
           [
-            payload.slot_id,
+            payload.slot_id ?? null,
             payload.psychologist_id,
             payload.age_category,
             payload.parent_name,
@@ -892,6 +980,7 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
             payload.child_age,
             payload.country,
             payload.request_text,
+            payload.preferred_time || null,
             payload.preferred_contact_method,
             timestamp
           ],
@@ -924,7 +1013,7 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
               s.timezone AS slot_timezone,
               s.status AS slot_status
             FROM bookings b
-            JOIN psychologists p ON p.id = b.psychologist_id
+            LEFT JOIN psychologists p ON p.id = b.psychologist_id
             LEFT JOIN slots s ON s.id = b.slot_id
             WHERE b.id = $1
           `,
@@ -961,7 +1050,7 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
               s.timezone AS slot_timezone,
               s.status AS slot_status
             FROM bookings b
-            JOIN psychologists p ON p.id = b.psychologist_id
+            LEFT JOIN psychologists p ON p.id = b.psychologist_id
             LEFT JOIN slots s ON s.id = b.slot_id
             ${built.where}
             ORDER BY b.created_at DESC
@@ -1087,7 +1176,7 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
               s.timezone AS slot_timezone,
               s.status AS slot_status
             FROM bookings b
-            JOIN psychologists p ON p.id = b.psychologist_id
+            LEFT JOIN psychologists p ON p.id = b.psychologist_id
             LEFT JOIN slots s ON s.id = b.slot_id
             WHERE b.id = $1
             ${locking}

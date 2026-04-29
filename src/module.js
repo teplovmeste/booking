@@ -98,12 +98,14 @@ function serializeSlot(row, options = {}) {
 
 function serializeBooking(row) {
   const slotStartsAt = row.slot_starts_at ? toIso(row.slot_starts_at) : null;
+  const psychologistId = row.psychologist_id === null || row.psychologist_id === undefined ? null : Number(row.psychologist_id);
+  const slotId = row.slot_id === null || row.slot_id === undefined ? null : Number(row.slot_id);
 
   return {
     id: Number(row.id),
-    slot_id: Number(row.slot_id),
-    psychologist_id: Number(row.psychologist_id),
-    psychologist_name: row.psychologist_name,
+    slot_id: slotId,
+    psychologist_id: psychologistId,
+    psychologist_name: row.psychologist_name || "Психолог не выбран",
     age_category: row.age_category,
     age_category_label: getCategoryLabel(row.age_category),
     parent_name: row.parent_name,
@@ -114,6 +116,7 @@ function serializeBooking(row) {
     child_age: String(row.child_age),
     country: row.country,
     request_text: row.request_text,
+    preferred_time: cleanString(row.preferred_time),
     preferred_contact_method: row.preferred_contact_method,
     preferred_contact_method_label: getContactMethodLabel(row.preferred_contact_method),
     status: row.status,
@@ -243,6 +246,48 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
 
     const value = validation.value;
     const timestamp = nowIso(nowProvider);
+
+    if (!value.slot_id) {
+      let psychologist = null;
+
+      if (value.psychologist_id) {
+        psychologist = await repository.getPsychologistById(value.psychologist_id);
+        if (!psychologist || !psychologist.is_active) {
+          throw new AppError(404, "PSYCHOLOGIST_NOT_FOUND", "Психолог не найден или отключен.");
+        }
+
+        if (value.age_category !== "not_important" && !normalizePsychologistCategories(psychologist).includes(value.age_category)) {
+          throw new AppError(400, "AGE_CATEGORY_MISMATCH", "Психолог не соответствует выбранной возрастной категории.");
+        }
+      }
+
+      const bookingId = await repository.insertBooking(
+        {
+          ...value,
+          slot_id: null,
+          psychologist_id: psychologist ? Number(psychologist.id) : null
+        },
+        timestamp
+      );
+
+      const booking = await repository.getBookingDetails(bookingId);
+      const notifications = await sendBookingNotifications({
+        booking: serializeBooking(booking),
+        psychologist: psychologist
+          ? {
+              id: Number(psychologist.id),
+              name: psychologist.name,
+              email: psychologist.email
+            }
+          : null,
+        slot: null
+      });
+
+      return {
+        booking: serializeBooking(booking),
+        notification: notifications
+      };
+    }
 
     const bookingId = await repository.transaction(async (tx) => {
       const slot = await tx.getSlotWithPsychologist(value.slot_id, { forUpdate: true });
@@ -435,7 +480,9 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
         throw new AppError(409, "TARGET_SLOT_UNAVAILABLE", "Целевой слот уже заняли.");
       }
 
-      await tx.freeOriginalSlot(timestamp, Number(booking.slot_id), Number(bookingId));
+      if (booking.slot_id) {
+        await tx.freeOriginalSlot(timestamp, Number(booking.slot_id), Number(bookingId));
+      }
       await tx.reassignBooking({
         bookingId: Number(bookingId),
         slotId: Number(targetSlotId),
