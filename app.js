@@ -4,6 +4,7 @@ const state = {
   selectedCategory: null,
   selectedSlot: null,
   fallbackPsychologist: null,
+  viewerTimeZone: "",
   successMessage: ""
 };
 
@@ -13,6 +14,7 @@ const elements = {
   psychologistsList: document.getElementById("psychologists-list"),
   stepTwoSection: document.getElementById("booking-step-2"),
   stepThreeSection: document.getElementById("booking-step-3"),
+  viewerTimeZoneLabel: document.getElementById("viewer-timezone-label"),
   fallbackRequest: document.getElementById("fallback-request"),
   fallbackRequestSummary: document.getElementById("fallback-request-summary"),
   fallbackPreferredTimeInput: document.getElementById("fallback-preferred-time-input"),
@@ -50,6 +52,31 @@ function showFeedback(target, message, kind = "error") {
 function clearFeedback(target) {
   target.textContent = "";
   target.className = "feedback hidden";
+}
+
+function getViewerTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
+
+function formatSlotForViewer(isoString, fallbackLabel = "") {
+  if (!isoString) {
+    return fallbackLabel;
+  }
+
+  try {
+    return new Intl.DateTimeFormat(document.documentElement.lang || undefined, {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(new Date(isoString));
+  } catch {
+    return fallbackLabel;
+  }
 }
 
 function scrollToSection(element) {
@@ -127,12 +154,22 @@ function renderContactMethods() {
   ].join("");
 }
 
-function renderPsychologists(data) {
+function renderViewerTimeZone() {
+  elements.viewerTimeZoneLabel.textContent = state.viewerTimeZone
+    ? `Слоты показаны в вашем часовом поясе: ${state.viewerTimeZone}.`
+    : "Слоты показаны в вашем локальном часовом поясе.";
+}
+
+function renderPsychologists(data, { autoOpenFallback = true } = {}) {
   const hasAnySlots = data.psychologists.some((item) => item.slots.length > 0);
   elements.categoryEmpty.classList.toggle("hidden", hasAnySlots);
   if (!hasAnySlots) {
     renderCategoryEmpty();
-    openFallbackRequest();
+    if (autoOpenFallback) {
+      openFallbackRequest();
+    } else {
+      elements.fallbackRequest.classList.add("hidden");
+    }
   } else if (!state.fallbackPsychologist) {
     elements.fallbackRequest.classList.add("hidden");
   }
@@ -142,11 +179,14 @@ function renderPsychologists(data) {
       const slotsMarkup = psychologist.slots.length
         ? psychologist.slots
             .map(
-              (slot) => `
-                <button class="slot-button${state.selectedSlot?.id === slot.id ? " is-active" : ""}" type="button" data-slot-id="${slot.id}" data-slot-label="${slot.starts_at_label}" data-psychologist-name="${psychologist.name}">
-                  ${slot.starts_at_label}
+              (slot) => {
+                const localLabel = formatSlotForViewer(slot.starts_at, slot.starts_at_label);
+                return `
+                <button class="slot-button${state.selectedSlot?.id === slot.id ? " is-active" : ""}" type="button" data-slot-id="${slot.id}" data-slot-label="${localLabel}" data-psychologist-name="${psychologist.name}">
+                  ${localLabel}
                 </button>
-              `
+              `;
+              }
             )
             .join("")
         : `
@@ -193,10 +233,10 @@ function setSelectedSlot(slot) {
   loadAvailability(state.selectedCategory);
 }
 
-async function loadAvailability(ageCategory) {
+async function loadAvailability(ageCategory, options = {}) {
   clearFeedback(elements.formFeedback);
   const data = await api(`./api/public/availability?age_category=${encodeURIComponent(ageCategory)}`);
-  renderPsychologists(data);
+  renderPsychologists(data, options);
 
   elements.psychologistsList.querySelectorAll("[data-slot-id]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -226,11 +266,13 @@ async function bootstrap() {
   const meta = await api("./api/public/meta");
   state.categories = meta.categories;
   state.contactMethods = meta.contact_methods || [];
+  state.viewerTimeZone = getViewerTimeZone();
   state.successMessage = meta.success_message;
   state.selectedCategory = meta.categories[0]?.value || null;
 
   renderCategories();
   renderContactMethods();
+  renderViewerTimeZone();
   elements.categoryGrid.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-category]");
     if (!button) return;
@@ -243,7 +285,7 @@ async function bootstrap() {
     elements.successCard.classList.add("hidden");
     elements.selectedSlotSummary.textContent = "Сначала выберите слот, после этого откроется форма заявки.";
     renderCategories();
-    await loadAvailability(state.selectedCategory);
+    await loadAvailability(state.selectedCategory, { autoOpenFallback: false });
   });
 
   if (state.selectedCategory) {
