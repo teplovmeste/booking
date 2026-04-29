@@ -76,6 +76,20 @@ export function cleanString(value) {
   return String(value || "").trim();
 }
 
+export function normalizeTimeZone(value) {
+  const normalized = cleanString(value);
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    new Intl.DateTimeFormat("ru-RU", { timeZone: normalized }).format(new Date());
+    return normalized;
+  } catch {
+    return "";
+  }
+}
+
 export function normalizeOptionalDate(value) {
   const normalized = cleanString(value);
   if (!normalized) return null;
@@ -91,6 +105,7 @@ export function validateBookingPayload(payload) {
   const hasSlotSelection = Number.isInteger(Number(payload.slot_id)) && Number(payload.slot_id) > 0;
   const preferredTime = cleanString(payload.preferred_time);
   const psychologistIdRaw = cleanString(payload.psychologist_id);
+  const clientTimeZone = normalizeTimeZone(payload.client_timezone);
   const requiredStringFields = [
     ["parent_name", "Укажите имя родителя."],
     ["parent_email", "Укажите email."],
@@ -161,6 +176,7 @@ export function validateBookingPayload(payload) {
       accept_terms: isChecked(payload.accept_terms),
       accept_privacy: isChecked(payload.accept_privacy),
       psychologist_id: psychologistIdRaw ? Number(psychologistIdRaw) : null,
+      client_timezone: clientTimeZone || null,
       preferred_time: preferredTime,
       age_category: cleanString(payload.age_category)
     }

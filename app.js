@@ -68,12 +68,13 @@ function formatSlotForViewer(isoString, fallbackLabel = "") {
   }
 
   try {
-    return new Intl.DateTimeFormat(document.documentElement.lang || undefined, {
+    const formatted = new Intl.DateTimeFormat(document.documentElement.lang || undefined, {
       day: "2-digit",
       month: "short",
       hour: "2-digit",
       minute: "2-digit"
     }).format(new Date(isoString));
+    return state.viewerTimeZone ? `${formatted} (${state.viewerTimeZone})` : `${formatted} (локальное время)`;
   } catch {
     return fallbackLabel;
   }
@@ -158,6 +159,10 @@ function renderViewerTimeZone() {
   elements.viewerTimeZoneLabel.textContent = state.viewerTimeZone
     ? `Слоты показаны в вашем часовом поясе: ${state.viewerTimeZone}.`
     : "Слоты показаны в вашем локальном часовом поясе.";
+}
+
+function syncClientTimeZoneField() {
+  elements.bookingForm.elements.client_timezone.value = state.viewerTimeZone || "";
 }
 
 function renderPsychologists(data, { autoOpenFallback = true } = {}) {
@@ -273,6 +278,7 @@ async function bootstrap() {
   renderCategories();
   renderContactMethods();
   renderViewerTimeZone();
+  syncClientTimeZoneField();
   elements.categoryGrid.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-category]");
     if (!button) return;
@@ -281,6 +287,7 @@ async function bootstrap() {
     state.selectedSlot = null;
     hideFallbackRequest();
     elements.bookingForm.reset();
+    syncClientTimeZoneField();
     elements.bookingForm.classList.add("hidden");
     elements.successCard.classList.add("hidden");
     elements.selectedSlotSummary.textContent = "Сначала выберите слот, после этого откроется форма заявки.";
@@ -327,6 +334,7 @@ elements.bookingForm.addEventListener("submit", async (event) => {
     });
 
     elements.bookingForm.reset();
+    syncClientTimeZoneField();
     elements.bookingForm.classList.add("hidden");
     state.selectedSlot = null;
     hideFallbackRequest();
@@ -340,8 +348,11 @@ elements.bookingForm.addEventListener("submit", async (event) => {
       elements.successWarning.classList.remove("hidden");
     }
 
-    await loadAvailability(state.selectedCategory);
-    elements.selectedSlotSummary.textContent = "Выберите следующий слот, если нужно оформить еще одну запись.";
+    await loadAvailability(state.selectedCategory, { autoOpenFallback: false });
+    elements.selectedSlotSummary.textContent = result.booking?.slot_id
+      ? "Выберите следующий слот, если нужно оформить еще одну запись."
+      : "Заявка отправлена без выбранного слота. Если нужно, можно оставить еще одну заявку.";
+    scrollToSection(elements.stepThreeSection);
   } catch (error) {
     const details = error.details ? Object.values(error.details).join(" ") : "";
     showFeedback(elements.formFeedback, [error.message, details].filter(Boolean).join(" "));

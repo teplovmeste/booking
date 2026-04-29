@@ -55,6 +55,31 @@ function getSenderAddress() {
   return RESEND_FROM || SMTP_FROM || ADMIN_EMAIL;
 }
 
+function formatSlotWithTimeZone(isoString, timeZone) {
+  if (!isoString) {
+    return "Слот не выбран";
+  }
+
+  if (!timeZone) {
+    return `${formatMoscowDateTime(isoString)} (Europe/Moscow)`;
+  }
+
+  try {
+    const formatted = new Intl.DateTimeFormat("ru-RU", {
+      timeZone,
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(new Date(isoString));
+
+    return `${formatted} (${timeZone})`;
+  } catch {
+    return `${formatMoscowDateTime(isoString)} (Europe/Moscow)`;
+  }
+}
+
 async function sendViaResend({ to, subject, text }) {
   const resend = createResendClient();
   if (!resend) {
@@ -112,7 +137,7 @@ function composeBookingBody({ booking, psychologist, slot }) {
   return [
     "Новая заявка на консультацию",
     "",
-    `Дата и время слота: ${slot?.starts_at ? formatMoscowDateTime(slot.starts_at) : "Слот не выбран"}`,
+    `Дата и время слота: ${slot?.starts_at ? `${formatMoscowDateTime(slot.starts_at)} (Europe/Moscow)` : "Слот не выбран"}`,
     `Психолог: ${psychologist?.name || "Психолог не выбран"}`,
     `Возрастная категория: ${getCategoryLabel(booking.age_category)}`,
     `Имя родителя: ${booking.parent_name}`,
@@ -129,11 +154,42 @@ function composeBookingBody({ booking, psychologist, slot }) {
   ].join("\n");
 }
 
+function composeClientBookingBody({ booking, psychologist, slot }) {
+  const detailsLine = slot?.starts_at
+    ? `Выбранный слот: ${formatSlotWithTimeZone(slot.starts_at, booking.client_timezone)}`
+    : `Предпочтительное время для консультации: ${booking.preferred_time || "Не указано"}`;
+
+  return [
+    "Спасибо за вашу заявку в проекте ТеплоВместе.",
+    "",
+    "Мы получили вашу заявку и скоро свяжемся с вами для подтверждения записи и дальнейших шагов.",
+    "",
+    detailsLine,
+    `Возрастная категория: ${getCategoryLabel(booking.age_category)}`,
+    `Психолог: ${psychologist?.name || "Подберем подходящего специалиста"}`,
+    `Предпочтительный способ связи: ${getContactMethodLabel(booking.preferred_contact_method)}`,
+    "",
+    "Если вы отвечаете на это письмо, пожалуйста, укажите имя родителя и имя ребенка.",
+    "",
+    "С теплом,",
+    "ТеплоВместе"
+  ].join("\n");
+}
+
 export async function sendBookingNotifications(context) {
+  const bookingWithMeta = {
+    ...context.booking,
+    client_timezone: context.clientTimeZone || null
+  };
   const body = composeBookingBody(context);
   const subject = context.slot?.starts_at
     ? `Новая запись: ${context.psychologist?.name || "Без психолога"} / ${formatMoscowDateTime(context.slot.starts_at)}`
     : `Новая заявка без слота: ${getCategoryLabel(context.booking.age_category)}`;
+  const clientSubject = "Спасибо за заявку в ТеплоВместе";
+  const clientBody = composeClientBookingBody({
+    ...context,
+    booking: bookingWithMeta
+  });
 
   try {
     await sendEmail({
@@ -149,6 +205,12 @@ export async function sendBookingNotifications(context) {
         text: body
       });
     }
+
+    await sendEmail({
+      to: context.booking.parent_email,
+      subject: clientSubject,
+      text: clientBody
+    });
 
     return { ok: true };
   } catch (error) {

@@ -53,6 +53,7 @@ function validBookingPayload(slotId, ageCategory) {
     country: "Россия",
     request_text: "Нужна консультация по адаптации в школе.",
     preferred_contact_method: "telegram",
+    client_timezone: "Europe/Berlin",
     accept_terms: "on",
     accept_privacy: "on"
   };
@@ -182,6 +183,7 @@ test("successful booking locks slot and sends notifications", async () => {
   assert.equal(slot.status, "booked");
   assert.equal(Number(slot.booking_id), result.booking.id);
   assert.equal(sentNotifications.length, 1);
+  assert.equal(sentNotifications[0].clientTimeZone, "Europe/Berlin");
 });
 
 test("booking can be created when parent selected not important", async () => {

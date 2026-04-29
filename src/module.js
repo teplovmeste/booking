@@ -273,6 +273,7 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
       const booking = await repository.getBookingDetails(bookingId);
       const notifications = await sendBookingNotifications({
         booking: serializeBooking(booking),
+        clientTimeZone: value.client_timezone,
         psychologist: psychologist
           ? {
               id: Number(psychologist.id),
@@ -328,6 +329,7 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
     const slot = await repository.getSlotWithPsychologist(value.slot_id);
     const notifications = await sendBookingNotifications({
       booking: serializeBooking(booking),
+      clientTimeZone: value.client_timezone,
       psychologist: {
         id: Number(slot.psychologist_id),
         name: slot.psychologist_name,
