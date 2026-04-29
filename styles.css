@@ -72,10 +72,9 @@ img {
 }
 
 .site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  display: grid;
+  justify-items: center;
+  gap: 18px;
   min-height: 120px;
   padding: 28px 32px;
   border: 1px solid var(--line);
@@ -86,29 +85,36 @@ img {
 
 .site-header__content {
   min-width: 0;
-  flex: 1;
+  width: 100%;
 }
 
 .brand-lockup {
-  display: flex;
-  align-items: center;
-  gap: 18px;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
   min-width: 0;
+  text-align: center;
+}
+
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .header-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 12px;
+  width: 100%;
 }
 
 .brand-logo {
-  width: 56px;
-  height: 56px;
-  flex: 0 0 56px;
+  width: auto;
+  height: auto;
+  max-height: 48px;
   object-fit: contain;
-  border-radius: 14px;
 }
 
 .eyebrow {
@@ -128,8 +134,9 @@ h2 {
 }
 
 h1 {
-  max-width: 14ch;
+  max-width: 16ch;
   font-size: clamp(2.2rem, 4vw, 4rem);
+  text-align: center;
 }
 
 h2 {
@@ -529,13 +536,11 @@ textarea {
   }
 
   .brand-lockup {
-    align-items: flex-start;
+    gap: 12px;
   }
 
   .brand-logo {
-    width: 48px;
-    height: 48px;
-    flex-basis: 48px;
+    max-height: 40px;
   }
 
   h1 {
@@ -560,5 +565,11 @@ textarea {
 
   .inline-field {
     min-width: 0;
+  }
+}
+
+@media (max-width: 580px) {
+  .brand-logo {
+    max-height: 32px;
   }
 }
