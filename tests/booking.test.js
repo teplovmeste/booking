@@ -52,7 +52,9 @@ function validBookingPayload(slotId, ageCategory) {
     child_age: "8 лет",
     country: "Россия",
     request_text: "Нужна консультация по адаптации в школе.",
-    preferred_contact_method: "telegram"
+    preferred_contact_method: "telegram",
+    accept_terms: "on",
+    accept_privacy: "on"
   };
 }
 
@@ -286,13 +288,17 @@ test("invalid booking payload is rejected with field details", async () => {
       ...validBookingPayload(slotId, "teens"),
       parent_email: "broken-email",
       child_age: "",
-      request_text: ""
+      request_text: "",
+      accept_terms: "",
+      accept_privacy: ""
     }),
     (error) => {
       assert.equal(error.code, "INVALID_BOOKING_FORM");
       assert.equal(error.details.parent_email, "Укажите корректный email.");
       assert.equal(error.details.child_age, "Укажите возраст ребенка или детей.");
       assert.equal(error.details.request_text, "Опишите краткий запрос.");
+      assert.equal(error.details.accept_terms, "Нужно принять условия оказания услуг.");
+      assert.equal(error.details.accept_privacy, "Нужно согласиться на обработку персональных данных.");
       return true;
     }
   );

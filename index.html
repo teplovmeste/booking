@@ -41,9 +41,7 @@
             </p>
           </div>
           <div class="category-grid" id="category-grid"></div>
-          <p class="empty-state hidden" id="category-empty">
-            Для этой категории пока нет доступных слотов.
-          </p>
+          <div class="empty-state hidden" id="category-empty"></div>
         </section>
 
         <section class="panel">
@@ -105,6 +103,27 @@
               <span>Краткий запрос</span>
               <textarea name="request_text" rows="5" required></textarea>
             </label>
+
+            <div class="consent-group form-full">
+              <label class="consent-item">
+                <input name="accept_terms" type="checkbox" required />
+                <span>
+                  Я принимаю
+                  <a href="https://www.teplovmeste.com/terms" target="_blank" rel="noreferrer">
+                    Условия оказания услуг
+                  </a>
+                </span>
+              </label>
+              <label class="consent-item">
+                <input name="accept_privacy" type="checkbox" required />
+                <span>
+                  Соглашаюсь на обработку моих
+                  <a href="https://www.teplovmeste.com/privacy-policy" target="_blank" rel="noreferrer">
+                    персональных данных
+                  </a>
+                </span>
+              </label>
+            </div>
 
             <input name="slot_id" type="hidden" />
             <input name="age_category" type="hidden" />

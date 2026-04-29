@@ -1,6 +1,7 @@
 const state = {
   categories: [],
   contactMethods: [],
+  contactEmail: "",
   selectedCategory: null,
   selectedSlot: null,
   successMessage: ""
@@ -45,6 +46,30 @@ function clearFeedback(target) {
   target.className = "feedback hidden";
 }
 
+function buildContactLink(subject, body) {
+  const params = new URLSearchParams({ subject, body });
+  return `mailto:${state.contactEmail}?${params.toString()}`;
+}
+
+function renderCategoryEmpty() {
+  const categoryLabel = state.categories.find((item) => item.value === state.selectedCategory)?.label || "выбранной категории";
+
+  elements.categoryEmpty.innerHTML = `
+    <div class="contact-fallback">
+      <p>Для категории <strong>${categoryLabel}</strong> сейчас нет доступных слотов.</p>
+      <a
+        class="button-secondary"
+        href="${buildContactLink(
+          `Нет слотов в категории ${categoryLabel}`,
+          `Здравствуйте!\n\nСейчас в категории ${categoryLabel} нет свободных слотов. Помогите, пожалуйста, подобрать запись или предложить альтернативу.`
+        )}"
+      >
+        Связаться с нами
+      </a>
+    </div>
+  `;
+}
+
 function renderCategories() {
   elements.categoryGrid.innerHTML = state.categories
     .map(
@@ -69,6 +94,9 @@ function renderContactMethods() {
 function renderPsychologists(data) {
   const hasAnySlots = data.psychologists.some((item) => item.slots.length > 0);
   elements.categoryEmpty.classList.toggle("hidden", hasAnySlots);
+  if (!hasAnySlots) {
+    renderCategoryEmpty();
+  }
 
   elements.psychologistsList.innerHTML = data.psychologists
     .map((psychologist) => {
@@ -82,7 +110,20 @@ function renderPsychologists(data) {
               `
             )
             .join("")
-        : `<p class="muted-line">Сейчас свободных слотов нет.</p>`;
+        : `
+          <div class="contact-fallback">
+            <p class="muted-line">Сейчас свободных слотов нет.</p>
+            <a
+              class="button-secondary"
+              href="${buildContactLink(
+                `Нет слотов: ${psychologist.name}`,
+                `Здравствуйте!\n\nСейчас у психолога ${psychologist.name} нет свободных слотов. Подскажите, пожалуйста, можно ли предложить альтернативу или лист ожидания?`
+              )}"
+            >
+              Связаться с нами
+            </a>
+          </div>
+        `;
 
       return `
         <article class="psychologist-card">
@@ -129,6 +170,7 @@ async function bootstrap() {
   const meta = await api("./api/public/meta");
   state.categories = meta.categories;
   state.contactMethods = meta.contact_methods || [];
+  state.contactEmail = meta.contact_email || "support@teplovmeste.com";
   state.successMessage = meta.success_message;
   state.selectedCategory = meta.categories[0]?.value || null;
 

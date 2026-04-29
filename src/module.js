@@ -1,4 +1,5 @@
 import {
+  ADMIN_EMAIL,
   AGE_CATEGORIES,
   APP_TIMEZONE,
   BOOKING_STATUSES,
@@ -185,6 +186,7 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
   async function getPublicMeta() {
     return {
       success_message: BOOKING_SUCCESS_MESSAGE,
+      contact_email: ADMIN_EMAIL,
       categories: PUBLIC_AGE_CATEGORIES,
       contact_methods: CONTACT_METHODS
     };

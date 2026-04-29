@@ -129,6 +129,14 @@ export function validateBookingPayload(payload) {
     errors.preferred_contact_method = "Выберите способ связи: Telegram или Email.";
   }
 
+  if (!isChecked(payload.accept_terms)) {
+    errors.accept_terms = "Нужно принять условия оказания услуг.";
+  }
+
+  if (!isChecked(payload.accept_privacy)) {
+    errors.accept_privacy = "Нужно согласиться на обработку персональных данных.";
+  }
+
   return {
     valid: Object.keys(errors).length === 0,
     errors,
@@ -143,9 +151,15 @@ export function validateBookingPayload(payload) {
       country: cleanString(payload.country),
       request_text: cleanString(payload.request_text),
       preferred_contact_method: cleanString(payload.preferred_contact_method),
+      accept_terms: isChecked(payload.accept_terms),
+      accept_privacy: isChecked(payload.accept_privacy),
       age_category: cleanString(payload.age_category)
     }
   };
+}
+
+function isChecked(value) {
+  return value === true || value === "true" || value === "on" || value === "1" || value === 1;
 }
 
 export function assertValidBookingStatus(status) {
