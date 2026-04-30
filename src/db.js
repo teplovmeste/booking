@@ -686,6 +686,10 @@ async function createSqliteRepository({ sqlitePath = DB_PATH, seedDemoData = tru
         Number(bookingId)
       );
     },
+    async deleteBooking(bookingId) {
+      const result = db.prepare("DELETE FROM bookings WHERE id = ?").run(Number(bookingId));
+      return result.changes;
+    },
     async getBookingWithSlot(bookingId) {
       return normalizeRow(
         db
@@ -1162,6 +1166,10 @@ async function createPostgresRepository({ databaseUrl = DATABASE_URL, seedDemoDa
           [timestamp, Number(bookingId)],
           runner
         );
+      },
+      async deleteBooking(bookingId) {
+        const result = await execute("DELETE FROM bookings WHERE id = $1", [Number(bookingId)], runner);
+        return result.rowCount;
       },
       async getBookingWithSlot(bookingId, options = {}) {
         const locking = options.forUpdate ? " FOR UPDATE OF b" : "";

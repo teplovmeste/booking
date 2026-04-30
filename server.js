@@ -199,6 +199,12 @@ async function routeRequest(req, res) {
     return;
   }
 
+  if (req.method === "DELETE" && /^\/api\/admin\/bookings\/\d+$/.test(pathname)) {
+    const bookingId = Number(pathname.split("/").pop());
+    sendJson(res, 200, { ok: true, data: await moduleApi.deleteBooking(bookingId) });
+    return;
+  }
+
   if ((req.method === "GET" || req.method === "HEAD") && pathname === "/health") {
     await repository.healthCheck();
 

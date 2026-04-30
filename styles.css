@@ -308,6 +308,11 @@ h3 {
   gap: 18px;
 }
 
+.admin-card--highlight {
+  border-color: rgba(34, 126, 174, 0.34);
+  box-shadow: 0 14px 32px rgba(34, 126, 174, 0.14);
+}
+
 .psychologist-card__head,
 .admin-card__head,
 .toolbar {
@@ -319,6 +324,95 @@ h3 {
 
 .slot-list {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.admin-slot-tile {
+  display: grid;
+  gap: 14px;
+  min-height: 132px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: #fff8ef;
+}
+
+.admin-slot-tile--highlight {
+  border-color: rgba(34, 126, 174, 0.34);
+  box-shadow: 0 12px 28px rgba(34, 126, 174, 0.12);
+}
+
+.admin-slot-tile__meta {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-slot-tile__time {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.admin-slot-tile__timezone {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.admin-slot-tile__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.admin-slot-tile__status {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.admin-slot-tile__status--available {
+  color: #2f7a58;
+}
+
+.admin-slot-tile__status--booked {
+  color: #9a6f1a;
+}
+
+.admin-slot-tile__status--deleted {
+  color: var(--danger);
+}
+
+.slot-trash-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid rgba(227, 88, 53, 0.18);
+  border-radius: 999px;
+  background: rgba(227, 88, 53, 0.08);
+  color: var(--accent);
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.slot-trash-button:hover:not(:disabled) {
+  border-color: rgba(227, 88, 53, 0.34);
+  background: rgba(227, 88, 53, 0.14);
+  transform: translateY(-1px);
+}
+
+.slot-trash-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.slot-trash-button svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 
 .contact-fallback {
@@ -511,6 +605,36 @@ textarea {
   font-size: 0.92rem;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.status-pill--success {
+  background: rgba(47, 122, 88, 0.16);
+  color: #2f7a58;
+}
+
+.status-pill--success-soft {
+  background: rgba(111, 191, 115, 0.18);
+  color: #397a3c;
+}
+
+.status-pill--success-strong {
+  background: rgba(52, 168, 83, 0.2);
+  color: #1d7f3b;
+}
+
+.status-pill--info {
+  background: rgba(34, 126, 174, 0.16);
+  color: var(--support);
+}
+
+.status-pill--danger {
+  background: rgba(178, 77, 55, 0.16);
+  color: var(--danger);
+}
+
+.status-pill--violet {
+  background: rgba(122, 91, 181, 0.18);
+  color: #6f4fb0;
 }
 
 .admin-list {

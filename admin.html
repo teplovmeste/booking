@@ -33,39 +33,6 @@
       <main class="admin-layout">
         <section class="panel panel-soft">
           <div class="section-heading">
-            <p class="eyebrow">Психологи</p>
-            <h2>Управление психологами</h2>
-          </div>
-          <div class="feedback hidden" id="psychologist-form-feedback"></div>
-          <form class="admin-form" id="psychologist-form">
-            <div class="form-grid">
-              <label>
-                <span>Имя</span>
-                <input name="name" type="text" required />
-              </label>
-              <label>
-                <span>Email</span>
-                <input name="email" type="email" required />
-              </label>
-              <label>
-                <span>Возрастные категории</span>
-                <div class="checkbox-group" data-psychologist-categories></div>
-              </label>
-              <label>
-                <span>Статус</span>
-                <select name="is_active" required>
-                  <option value="true">Активен</option>
-                  <option value="false">Выключен</option>
-                </select>
-              </label>
-            </div>
-            <button class="button-primary" type="submit">Добавить психолога</button>
-          </form>
-          <div class="table-card admin-list" id="psychologists-list"></div>
-        </section>
-
-        <section class="panel panel-soft">
-          <div class="section-heading">
             <p class="eyebrow">Слоты</p>
             <h2>Создать слот</h2>
           </div>
@@ -75,15 +42,28 @@
               <span>Психолог</span>
               <select name="psychologist_id" required></select>
             </label>
-            <label>
-              <span>Дата и время по Москве</span>
-              <input name="starts_at_local" type="datetime-local" required />
-            </label>
+            <div class="form-grid form-grid--slot-time">
+              <label>
+                <span>Дата по Москве</span>
+                <input name="starts_at_date" type="date" required />
+              </label>
+              <label>
+                <span>Часы</span>
+                <select name="starts_at_hour" required></select>
+              </label>
+              <label>
+                <span>Минуты</span>
+                <select name="starts_at_minute" required>
+                  <option value="00">00</option>
+                  <option value="30">30</option>
+                </select>
+              </label>
+            </div>
             <button class="button-primary" type="submit">Создать слот</button>
           </form>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="slots-section">
           <div class="toolbar">
             <div class="section-heading">
               <p class="eyebrow">Заявки</p>
@@ -115,6 +95,39 @@
           </div>
           <div class="feedback hidden" id="slots-feedback"></div>
           <div class="table-card" id="slots-list"></div>
+        </section>
+
+        <section class="panel panel-soft">
+          <div class="section-heading">
+            <p class="eyebrow">Психологи</p>
+            <h2>Управление психологами</h2>
+          </div>
+          <div class="feedback hidden" id="psychologist-form-feedback"></div>
+          <form class="admin-form" id="psychologist-form">
+            <div class="form-grid">
+              <label>
+                <span>Имя</span>
+                <input name="name" type="text" required />
+              </label>
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" required />
+              </label>
+              <label>
+                <span>Возрастные категории</span>
+                <div class="checkbox-group" data-psychologist-categories></div>
+              </label>
+              <label>
+                <span>Статус</span>
+                <select name="is_active" required>
+                  <option value="true">Активен</option>
+                  <option value="false">Выключен</option>
+                </select>
+              </label>
+            </div>
+            <button class="button-primary" type="submit">Добавить психолога</button>
+          </form>
+          <div class="table-card admin-list" id="psychologists-list"></div>
         </section>
       </main>
     </div>

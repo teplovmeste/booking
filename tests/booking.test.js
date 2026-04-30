@@ -230,6 +230,24 @@ test("booking status can be changed in admin", async () => {
   assert.equal(updated.status, "confirmed");
 });
 
+test("admin bookings list keeps new first and cancelled last", async () => {
+  const { repository, moduleApi } = await createTestModule();
+  const firstSlotId = (await getFirstAvailableSlotForCategory(repository, "preschool")).id;
+  const secondSlotId = (await getFirstAvailableSlotForCategory(repository, "primary_school")).id;
+
+  const firstBooking = await moduleApi.createBooking(validBookingPayload(firstSlotId, "preschool"));
+  const secondBooking = await moduleApi.createBooking(validBookingPayload(secondSlotId, "primary_school"));
+
+  await moduleApi.updateBookingStatus(secondBooking.booking.id, "cancelled");
+
+  const items = await moduleApi.listAdminBookings({});
+
+  assert.equal(items[0].id, firstBooking.booking.id);
+  assert.equal(items.at(-1).id, secondBooking.booking.id);
+  assert.equal(items[0].status, "new");
+  assert.equal(items.at(-1).status, "cancelled");
+});
+
 test("admin can transfer booking and old slot becomes available", async () => {
   const { repository, moduleApi } = await createTestModule();
   const oldSlotId = (await getFirstAvailableSlotForCategory(repository, "teens")).id;
@@ -289,6 +307,29 @@ test("admin can cancel booking and release the slot", async () => {
   assert.equal(cancelled.status, "cancelled");
   assert.equal(slot.status, "available");
   assert.equal(slot.booking_id, null);
+});
+
+test("admin can delete cancelled booking", async () => {
+  const { repository, moduleApi } = await createTestModule();
+  const slotId = (await getFirstAvailableSlotForCategory(repository, "primary_school")).id;
+  const created = await moduleApi.createBooking(validBookingPayload(slotId, "primary_school"));
+
+  await moduleApi.cancelBooking(created.booking.id, { releaseSlot: true });
+  const result = await moduleApi.deleteBooking(created.booking.id);
+  const deleted = await repository.getBookingWithSlot(created.booking.id);
+
+  assert.equal(result.id, created.booking.id);
+  assert.equal(deleted, null);
+});
+
+test("admin cannot delete active booking", async () => {
+  const { repository, moduleApi } = await createTestModule();
+  const slotId = (await getFirstAvailableSlotForCategory(repository, "preschool")).id;
+  const created = await moduleApi.createBooking(validBookingPayload(slotId, "preschool"));
+
+  await assert.rejects(() => moduleApi.deleteBooking(created.booking.id), {
+    code: "BOOKING_DELETE_FORBIDDEN"
+  });
 });
 
 test("admin cannot delete a booked slot", async () => {

@@ -45,7 +45,7 @@ export const CONTACT_METHODS = [
 
 export const BOOKING_STATUSES = [
   { value: "new", label: "Новая" },
-  { value: "awaiting_payment", label: "Ожидает оплаты" },
+  { value: "awaiting_payment", label: "Оплачена" },
   { value: "confirmed", label: "Подтверждена" },
   { value: "cancelled", label: "Отменена" },
   { value: "completed", label: "Завершена" }

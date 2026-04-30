@@ -128,6 +128,32 @@ function serializeBooking(row) {
   };
 }
 
+const ADMIN_BOOKING_STATUS_ORDER = {
+  new: 0,
+  awaiting_payment: 1,
+  confirmed: 2,
+  completed: 3,
+  cancelled: 4
+};
+
+function compareAdminBookings(left, right) {
+  const leftRank = ADMIN_BOOKING_STATUS_ORDER[left.status] ?? 99;
+  const rightRank = ADMIN_BOOKING_STATUS_ORDER[right.status] ?? 99;
+
+  if (leftRank !== rightRank) {
+    return leftRank - rightRank;
+  }
+
+  const leftCreatedAt = Date.parse(left.created_at || "") || 0;
+  const rightCreatedAt = Date.parse(right.created_at || "") || 0;
+
+  if (leftCreatedAt !== rightCreatedAt) {
+    return rightCreatedAt - leftCreatedAt;
+  }
+
+  return right.id - left.id;
+}
+
 function toIso(value) {
   return value instanceof Date ? value.toISOString() : String(value);
 }
@@ -346,7 +372,7 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
 
   async function listAdminBookings(filters = {}) {
     normalizeOptionalDate(filters.date);
-    return (await repository.listAdminBookings(filters)).map(serializeBooking);
+    return (await repository.listAdminBookings(filters)).map(serializeBooking).sort(compareAdminBookings);
   }
 
   async function listAdminSlots(filters = {}) {
@@ -432,6 +458,24 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
     return serializeBooking(await repository.getBookingDetails(Number(bookingId)));
   }
 
+  async function deleteBooking(bookingId) {
+    const existing = await repository.getBookingWithSlot(Number(bookingId));
+    if (!existing) {
+      throw new AppError(404, "BOOKING_NOT_FOUND", "Заявка не найдена.");
+    }
+
+    if (existing.status !== "cancelled") {
+      throw new AppError(409, "BOOKING_DELETE_FORBIDDEN", "Удалять можно только отмененные заявки.");
+    }
+
+    await repository.transaction(async (tx) => {
+      await tx.releaseSlotByBooking(Number(bookingId), nowIso(nowProvider));
+      await tx.deleteBooking(Number(bookingId));
+    });
+
+    return { id: Number(bookingId) };
+  }
+
   async function deleteSlot(slotId) {
     const slot = await repository.getSlotById(Number(slotId));
     if (!slot) {
@@ -510,6 +554,7 @@ export function createBookingModule({ repository, sendBookingNotifications, nowP
     createSlot,
     updateBookingStatus,
     cancelBooking,
+    deleteBooking,
     deleteSlot,
     transferBooking
   };

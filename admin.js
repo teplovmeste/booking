@@ -3,7 +3,8 @@ const state = {
   bookingsFilters: {},
   slotsFilters: {},
   currentSlots: [],
-  psychologists: []
+  psychologists: [],
+  recentCreatedSlotId: null
 };
 
 const elements = {
@@ -17,8 +18,14 @@ const elements = {
   bookingsFeedback: document.getElementById("bookings-feedback"),
   slotsFeedback: document.getElementById("slots-feedback"),
   bookingsList: document.getElementById("bookings-list"),
-  slotsList: document.getElementById("slots-list")
+  slotsList: document.getElementById("slots-list"),
+  slotsSection: document.getElementById("slots-section")
 };
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => {
+  const value = String(index).padStart(2, "0");
+  return { value, label: value };
+});
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -53,11 +60,32 @@ function clearFeedback(target) {
   target.className = "feedback hidden";
 }
 
+function scrollToElement(element) {
+  if (!element) return;
+
+  const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  window.requestAnimationFrame(() => {
+    element.scrollIntoView({ behavior, block: "start" });
+  });
+}
+
 function fillSelect(select, options, includeEmptyLabel) {
   select.innerHTML = [
     includeEmptyLabel ? `<option value="">${includeEmptyLabel}</option>` : "",
     ...options.map((item) => `<option value="${item.value}">${item.label}</option>`)
   ].join("");
+}
+
+function buildSlotStartsAtLocal(form) {
+  const date = form.elements.starts_at_date.value;
+  const hour = form.elements.starts_at_hour.value;
+  const minute = form.elements.starts_at_minute.value;
+
+  if (!date || hour === "" || minute === "") {
+    return "";
+  }
+
+  return `${date}T${hour}:${minute}`;
 }
 
 function buildQuery(params) {
@@ -76,6 +104,22 @@ function buildPsychologistOptions() {
     value: String(item.id),
     label: `${item.name} — ${item.age_categories_label}`
   }));
+}
+
+function getPsychologistStatusPillClass(isActive) {
+  return isActive ? "status-pill status-pill--success" : "status-pill";
+}
+
+function getBookingStatusPillClass(status) {
+  const statusClassMap = {
+    new: "status-pill status-pill--info",
+    awaiting_payment: "status-pill status-pill--success-strong",
+    confirmed: "status-pill status-pill--success-soft",
+    cancelled: "status-pill status-pill--danger",
+    completed: "status-pill status-pill--violet"
+  };
+
+  return statusClassMap[status] || "status-pill";
 }
 
 function renderCategoryCheckboxes(selectedValues = [], namespace = "psychologist") {
@@ -106,6 +150,8 @@ function refreshPsychologistSelects() {
     "create"
   );
   fillSelect(elements.slotForm.elements.psychologist_id, psychologists);
+  fillSelect(elements.slotForm.elements.starts_at_hour, HOUR_OPTIONS);
+  elements.slotForm.elements.starts_at_minute.value = "00";
   fillSelect(elements.bookingFilters.elements.psychologist_id, psychologists, "Все психологи");
   fillSelect(elements.slotFilters.elements.psychologist_id, psychologists, "Все психологи");
   fillSelect(elements.bookingFilters.elements.status, state.meta.booking_statuses, "Все статусы");
@@ -127,7 +173,7 @@ function renderPsychologists(items) {
               <h3>${psychologist.name}</h3>
               <p>${psychologist.age_categories_label}</p>
             </div>
-            <span class="status-pill" data-status-pill>${psychologist.is_active ? "Активен" : "Выключен"}</span>
+            <span class="${getPsychologistStatusPillClass(psychologist.is_active)}" data-status-pill>${psychologist.is_active ? "Активен" : "Выключен"}</span>
           </div>
           <form class="admin-form compact-form" data-psychologist-form data-psychologist-id="${psychologist.id}">
             <div class="admin-card__grid">
@@ -171,6 +217,7 @@ function syncPsychologistStatusPreview(form) {
     return;
   }
 
+  statusPill.className = getPsychologistStatusPillClass(selectedValue === "true");
   statusPill.textContent = selectedValue === "true" ? "Активен" : "Выключен";
 }
 
@@ -209,7 +256,7 @@ function renderBookings(items) {
               <h3>${booking.parent_name} → ${booking.psychologist_name}</h3>
               <p>${booking.slot_starts_at_label}</p>
             </div>
-            <span class="status-pill">${booking.status_label}</span>
+            <span class="${getBookingStatusPillClass(booking.status)}">${booking.status_label}</span>
           </div>
           <div class="admin-card__grid">
             <p><strong>Категория:</strong> ${booking.age_category_label}</p>
@@ -229,12 +276,14 @@ function renderBookings(items) {
                 ${statusOptions}
               </select>
             </label>
-            <button class="button-secondary" type="button" data-action="cancel" data-booking-id="${booking.id}">
-              Отменить
-            </button>
             <button class="button-secondary" type="button" data-action="cancel-release" data-booking-id="${booking.id}">
               Отменить и освободить слот
             </button>
+            ${booking.status === "cancelled" ? `
+              <button class="button-secondary" type="button" data-action="delete-booking" data-booking-id="${booking.id}">
+                Удалить заявку
+              </button>
+            ` : ""}
             <label class="inline-field">
               <span>Перенос</span>
               <select data-action="transfer" data-booking-id="${booking.id}">
@@ -256,37 +305,69 @@ function renderSlots(items) {
     return;
   }
 
-  elements.slotsList.innerHTML = items
-    .map(
-      (slot) => `
-        <article class="admin-card">
-          <div class="admin-card__head">
-            <div>
-              <h3>${slot.psychologist_name}</h3>
-              <p>${slot.starts_at_label}</p>
-            </div>
-            <span class="status-pill">${slot.status}</span>
-          </div>
-          <div class="admin-card__grid">
-            <p><strong>Категории:</strong> ${slot.psychologist_age_categories_label}</p>
-            <p><strong>Часовой пояс:</strong> ${slot.timezone}</p>
-            <p><strong>ID слота:</strong> ${slot.id}</p>
-          </div>
-          <div class="admin-actions">
-            <button
-              class="button-secondary"
-              type="button"
-              data-action="delete-slot"
-              data-slot-id="${slot.id}"
-              ${slot.status === "booked" ? "disabled" : ""}
-            >
-              Удалить слот
-            </button>
-          </div>
-        </article>
-      `
-    )
+  const grouped = new Map();
+
+  for (const slot of items) {
+    const psychologistId = String(slot.psychologist_id);
+    if (!grouped.has(psychologistId)) {
+      grouped.set(psychologistId, {
+        psychologist_id: slot.psychologist_id,
+        psychologist_name: slot.psychologist_name,
+        psychologist_age_categories_label: slot.psychologist_age_categories_label,
+        slots: []
+      });
+    }
+
+    grouped.get(psychologistId).slots.push(slot);
+  }
+
+  elements.slotsList.innerHTML = [...grouped.values()]
+    .map((group) => `
+      <article class="psychologist-card">
+        <div class="psychologist-card__head">
+          <h3>${escapeHtml(group.psychologist_name)}</h3>
+          <p>Работает с: ${escapeHtml(group.psychologist_age_categories_label)}</p>
+        </div>
+        <div class="slot-list">
+          ${group.slots.map((slot) => renderAdminSlotTile(slot)).join("")}
+        </div>
+      </article>
+    `)
     .join("");
+}
+
+function renderAdminSlotTile(slot) {
+  const statusLabelMap = {
+    available: "Доступен",
+    booked: "Занят",
+    deleted: "Удален"
+  };
+  const statusLabel = statusLabelMap[slot.status] || slot.status;
+
+  return `
+    <div class="admin-slot-tile${state.recentCreatedSlotId === slot.id ? " admin-slot-tile--highlight" : ""}" data-slot-card-id="${slot.id}">
+      <div class="admin-slot-tile__meta">
+        <span class="admin-slot-tile__time">${escapeHtml(slot.starts_at_label)}</span>
+        <span class="admin-slot-tile__timezone">(${escapeHtml(slot.timezone)})</span>
+      </div>
+      <div class="admin-slot-tile__footer">
+        <span class="admin-slot-tile__status admin-slot-tile__status--${slot.status}">${statusLabel}</span>
+        <button
+          class="slot-trash-button"
+          type="button"
+          data-action="delete-slot"
+          data-slot-id="${slot.id}"
+          aria-label="Удалить слот ${escapeHtml(slot.starts_at_label)}"
+          title="Удалить слот"
+          ${slot.status !== "available" ? "disabled" : ""}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v8h-2V9zm4 0h2v8h-2V9zM7 9h2v8H7V9zm1 12a2 2 0 0 1-2-2V8h12v11a2 2 0 0 1-2 2H8z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  `;
 }
 
 async function loadMeta() {
@@ -380,16 +461,27 @@ elements.psychologistsList.addEventListener("change", (event) => {
 elements.slotForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearFeedback(elements.slotFormFeedback);
-  const payload = Object.fromEntries(new FormData(elements.slotForm).entries());
+  const payload = {
+    psychologist_id: elements.slotForm.elements.psychologist_id.value,
+    starts_at_local: buildSlotStartsAtLocal(elements.slotForm)
+  };
 
   try {
-    await api("./api/admin/slots", {
+    const createdSlot = await api("./api/admin/slots", {
       method: "POST",
       body: JSON.stringify(payload)
     });
+    state.recentCreatedSlotId = createdSlot.id;
     elements.slotForm.reset();
-    showFeedback(elements.slotFormFeedback, "Слот создан.", "success");
+    fillSelect(elements.slotForm.elements.starts_at_hour, HOUR_OPTIONS);
+    elements.slotForm.elements.starts_at_minute.value = "00";
+    state.slotsFilters = {};
+    elements.slotFilters.reset();
+    showFeedback(elements.slotFormFeedback, `Слот создан: ${createdSlot.psychologist_name}, ${createdSlot.starts_at_label}.`, "success");
     await refreshLists();
+    scrollToElement(elements.slotsSection);
+    const createdCard = elements.slotsList.querySelector(`[data-slot-card-id="${createdSlot.id}"]`);
+    scrollToElement(createdCard);
   } catch (error) {
     showFeedback(elements.slotFormFeedback, buildErrorMessage(error) || "Не удалось создать слот.");
   }
@@ -448,20 +540,19 @@ elements.bookingsList.addEventListener("click", async (event) => {
   clearFeedback(elements.bookingsFeedback);
 
   try {
-    if (button.dataset.action === "cancel") {
-      await api(`./api/admin/bookings/${bookingId}/cancel`, {
-        method: "POST",
-        body: JSON.stringify({ release_slot: false })
-      });
-      showFeedback(elements.bookingsFeedback, "Заявка отменена.", "success");
-    }
-
     if (button.dataset.action === "cancel-release") {
       await api(`./api/admin/bookings/${bookingId}/cancel`, {
         method: "POST",
         body: JSON.stringify({ release_slot: true })
       });
       showFeedback(elements.bookingsFeedback, "Заявка отменена, слот освобожден.", "success");
+    }
+
+    if (button.dataset.action === "delete-booking") {
+      await api(`./api/admin/bookings/${bookingId}`, {
+        method: "DELETE"
+      });
+      showFeedback(elements.bookingsFeedback, "Заявка удалена.", "success");
     }
 
     await refreshLists();

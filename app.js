@@ -130,7 +130,7 @@ function openFallbackRequest({ psychologistId = "", psychologistName = "" } = {}
     : "Слот не выбран. Мы попробуем подобрать удобное время для консультации.";
 
   elements.fallbackRequest.classList.remove("hidden");
-  scrollToSection(elements.stepTwoSection);
+  scrollToSection(elements.fallbackRequest);
   elements.fallbackPreferredTimeInput.focus();
 }
 
