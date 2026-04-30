@@ -23,7 +23,8 @@ const elements = {
 };
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => {
-  const value = String(index).padStart(2, "0");
+  const hour = (index + 8) % 24;
+  const value = String(hour).padStart(2, "0");
   return { value, label: value };
 });
 
@@ -145,17 +146,20 @@ function renderCategoryCheckboxes(selectedValues = [], namespace = "psychologist
 
 function refreshPsychologistSelects() {
   const psychologists = buildPsychologistOptions();
+  const visibleSlotStatuses = state.meta.slot_statuses.filter((status) => status.value !== "deleted");
   elements.psychologistForm.querySelector("[data-psychologist-categories]").innerHTML = renderCategoryCheckboxes(
     [],
     "create"
   );
-  fillSelect(elements.slotForm.elements.psychologist_id, psychologists);
+  fillSelect(elements.slotForm.elements.psychologist_id, psychologists, "Выберите психолога");
   fillSelect(elements.slotForm.elements.starts_at_hour, HOUR_OPTIONS);
+  elements.slotForm.elements.psychologist_id.value = "";
+  elements.slotForm.elements.starts_at_hour.value = "08";
   elements.slotForm.elements.starts_at_minute.value = "00";
   fillSelect(elements.bookingFilters.elements.psychologist_id, psychologists, "Все психологи");
   fillSelect(elements.slotFilters.elements.psychologist_id, psychologists, "Все психологи");
   fillSelect(elements.bookingFilters.elements.status, state.meta.booking_statuses, "Все статусы");
-  fillSelect(elements.slotFilters.elements.status, state.meta.slot_statuses, "Все статусы");
+  fillSelect(elements.slotFilters.elements.status, visibleSlotStatuses, "Все статусы");
 }
 
 function renderPsychologists(items) {
@@ -298,16 +302,18 @@ function renderBookings(items) {
 }
 
 function renderSlots(items) {
-  state.currentSlots = items;
+  const visibleItems = items.filter((slot) => slot.status !== "deleted");
 
-  if (!items.length) {
+  state.currentSlots = visibleItems;
+
+  if (!visibleItems.length) {
     elements.slotsList.innerHTML = '<p class="empty-state">Слотов по текущему фильтру нет.</p>';
     return;
   }
 
   const grouped = new Map();
 
-  for (const slot of items) {
+  for (const slot of visibleItems) {
     const psychologistId = String(slot.psychologist_id);
     if (!grouped.has(psychologistId)) {
       grouped.set(psychologistId, {
@@ -473,15 +479,15 @@ elements.slotForm.addEventListener("submit", async (event) => {
     });
     state.recentCreatedSlotId = createdSlot.id;
     elements.slotForm.reset();
+    fillSelect(elements.slotForm.elements.psychologist_id, buildPsychologistOptions(), "Выберите психолога");
+    elements.slotForm.elements.psychologist_id.value = "";
     fillSelect(elements.slotForm.elements.starts_at_hour, HOUR_OPTIONS);
+    elements.slotForm.elements.starts_at_hour.value = "08";
     elements.slotForm.elements.starts_at_minute.value = "00";
     state.slotsFilters = {};
     elements.slotFilters.reset();
     showFeedback(elements.slotFormFeedback, `Слот создан: ${createdSlot.psychologist_name}, ${createdSlot.starts_at_label}.`, "success");
     await refreshLists();
-    scrollToElement(elements.slotsSection);
-    const createdCard = elements.slotsList.querySelector(`[data-slot-card-id="${createdSlot.id}"]`);
-    scrollToElement(createdCard);
   } catch (error) {
     showFeedback(elements.slotFormFeedback, buildErrorMessage(error) || "Не удалось создать слот.");
   }
