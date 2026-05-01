@@ -26,6 +26,45 @@ export const SENDMAIL_PATH = process.env.SENDMAIL_PATH || "";
 export const BOOKING_SUCCESS_MESSAGE =
   process.env.BOOKING_SUCCESS_MESSAGE ||
   "Спасибо! Ваша заявка принята. Мы свяжемся с вами для подтверждения записи и дальнейших шагов.";
+export const CLIENT_BOOKING_EMAIL_SUBJECT =
+  process.env.CLIENT_BOOKING_EMAIL_SUBJECT ||
+  "Спасибо за заявку в ТеплоВместе";
+export const CLIENT_BOOKING_EMAIL_BODY_WITH_SLOT =
+  process.env.CLIENT_BOOKING_EMAIL_BODY_WITH_SLOT ||
+  [
+    "Здравствуйте, {{parent_name}}!",
+    "",
+    "Спасибо за вашу заявку в проекте ТеплоВместе.",
+    "Мы получили вашу заявку и скоро свяжемся с вами для подтверждения записи и дальнейших шагов.",
+    "",
+    "Выбранный слот: {{slot_time}}",
+    "Возрастная категория: {{age_category}}",
+    "Психолог: {{psychologist_name}}",
+    "Предпочтительный способ связи: {{preferred_contact_method}}",
+    "",
+    "Если вы отвечаете на это письмо, пожалуйста, укажите имя родителя и имя ребенка.",
+    "",
+    "С теплом,",
+    "ТеплоВместе"
+  ].join("\n");
+export const CLIENT_BOOKING_EMAIL_BODY_WITHOUT_SLOT =
+  process.env.CLIENT_BOOKING_EMAIL_BODY_WITHOUT_SLOT ||
+  [
+    "Здравствуйте, {{parent_name}}!",
+    "",
+    "Спасибо за вашу заявку в проекте ТеплоВместе.",
+    "Мы получили вашу заявку и скоро свяжемся с вами, чтобы подобрать удобное время и обсудить дальнейшие шаги.",
+    "",
+    "Предпочтительное время для консультации: {{preferred_time}}",
+    "Возрастная категория: {{age_category}}",
+    "Психолог: {{psychologist_name}}",
+    "Предпочтительный способ связи: {{preferred_contact_method}}",
+    "",
+    "Если вы отвечаете на это письмо, пожалуйста, укажите имя родителя и имя ребенка.",
+    "",
+    "С теплом,",
+    "ТеплоВместе"
+  ].join("\n");
 
 export const AGE_CATEGORIES = [
   { value: "preschool", label: "0-8 лет" },
@@ -34,8 +73,8 @@ export const AGE_CATEGORIES = [
 ];
 
 export const PUBLIC_AGE_CATEGORIES = [
-  ...AGE_CATEGORIES,
-  { value: "not_important", label: "Не важно" }
+  { value: "not_important", label: "Не важно" },
+  ...AGE_CATEGORIES
 ];
 
 export const CONTACT_METHODS = [

@@ -152,6 +152,9 @@ Render использует:
 - `SMTP_PASS`
 - `SMTP_FROM`
 - `BOOKING_SUCCESS_MESSAGE`
+- `CLIENT_BOOKING_EMAIL_SUBJECT`
+- `CLIENT_BOOKING_EMAIL_BODY_WITH_SLOT`
+- `CLIENT_BOOKING_EMAIL_BODY_WITHOUT_SLOT`
 
 ## Email
 
@@ -165,6 +168,27 @@ Render использует:
 
 SMTP и `sendmail` оставлены как fallback.
 
+Кастомизация письма клиенту:
+
+- `CLIENT_BOOKING_EMAIL_SUBJECT`
+- `CLIENT_BOOKING_EMAIL_BODY_WITH_SLOT`
+- `CLIENT_BOOKING_EMAIL_BODY_WITHOUT_SLOT`
+
+Поддерживаются плейсхолдеры:
+
+- `{{parent_name}}`
+- `{{parent_email}}`
+- `{{child_name}}`
+- `{{child_age}}`
+- `{{country}}`
+- `{{request_text}}`
+- `{{age_category}}`
+- `{{psychologist_name}}`
+- `{{preferred_contact_method}}`
+- `{{preferred_time}}`
+- `{{slot_time}}`
+- `{{client_timezone}}`
+
 Если email-канал не настроен:
 
 - бронь все равно создается
@@ -174,6 +198,5 @@ SMTP и `sendmail` оставлены как fallback.
 ## Что еще не закрыто
 
 - production-rate-limiting
-- клиентские email-уведомления
 - оплата
 - интеграции с календарями

@@ -4,6 +4,9 @@ import nodemailer from "nodemailer";
 import { Resend } from "resend";
 import {
   ADMIN_EMAIL,
+  CLIENT_BOOKING_EMAIL_BODY_WITHOUT_SLOT,
+  CLIENT_BOOKING_EMAIL_BODY_WITH_SLOT,
+  CLIENT_BOOKING_EMAIL_SUBJECT,
   EMAIL_ERROR_LOG_PATH,
   RESEND_API_KEY,
   RESEND_FROM,
@@ -53,6 +56,10 @@ function createSendmailTransport() {
 
 function getSenderAddress() {
   return RESEND_FROM || SMTP_FROM || ADMIN_EMAIL;
+}
+
+function normalizeTemplateText(value) {
+  return String(value || "").replaceAll("\\n", "\n");
 }
 
 function formatSlotWithTimeZone(isoString, timeZone) {
@@ -154,26 +161,37 @@ function composeBookingBody({ booking, psychologist, slot }) {
   ].join("\n");
 }
 
-function composeClientBookingBody({ booking, psychologist, slot }) {
-  const detailsLine = slot?.starts_at
-    ? `Выбранный слот: ${formatSlotWithTimeZone(slot.starts_at, booking.client_timezone)}`
-    : `Предпочтительное время для консультации: ${booking.preferred_time || "Не указано"}`;
+function renderTemplate(template, values) {
+  return normalizeTemplateText(template).replaceAll(/\{\{\s*([a-z_]+)\s*\}\}/g, (match, key) => {
+    return values[key] ?? match;
+  });
+}
 
-  return [
-    "Спасибо за вашу заявку в проекте ТеплоВместе.",
-    "",
-    "Мы получили вашу заявку и скоро свяжемся с вами для подтверждения записи и дальнейших шагов.",
-    "",
-    detailsLine,
-    `Возрастная категория: ${getCategoryLabel(booking.age_category)}`,
-    `Психолог: ${psychologist?.name || "Подберем подходящего специалиста"}`,
-    `Предпочтительный способ связи: ${getContactMethodLabel(booking.preferred_contact_method)}`,
-    "",
-    "Если вы отвечаете на это письмо, пожалуйста, укажите имя родителя и имя ребенка.",
-    "",
-    "С теплом,",
-    "ТеплоВместе"
-  ].join("\n");
+function buildClientTemplateValues({ booking, psychologist, slot }) {
+  return {
+    parent_name: booking.parent_name,
+    parent_email: booking.parent_email,
+    child_name: booking.child_name,
+    child_age: booking.child_age,
+    country: booking.country,
+    request_text: booking.request_text,
+    age_category: getCategoryLabel(booking.age_category),
+    psychologist_name: psychologist?.name || "Подберем подходящего специалиста",
+    preferred_contact_method: getContactMethodLabel(booking.preferred_contact_method),
+    preferred_time: booking.preferred_time || "Не указано",
+    slot_time: slot?.starts_at
+      ? formatSlotWithTimeZone(slot.starts_at, booking.client_timezone)
+      : "Слот не выбран",
+    client_timezone: booking.client_timezone || "Europe/Moscow"
+  };
+}
+
+function composeClientBookingBody(context) {
+  const template = context.slot?.starts_at
+    ? CLIENT_BOOKING_EMAIL_BODY_WITH_SLOT
+    : CLIENT_BOOKING_EMAIL_BODY_WITHOUT_SLOT;
+
+  return renderTemplate(template, buildClientTemplateValues(context));
 }
 
 export async function sendBookingNotifications(context) {
@@ -185,7 +203,10 @@ export async function sendBookingNotifications(context) {
   const subject = context.slot?.starts_at
     ? `Новая запись: ${context.psychologist?.name || "Без психолога"} / ${formatMoscowDateTime(context.slot.starts_at)}`
     : `Новая заявка без слота: ${getCategoryLabel(context.booking.age_category)}`;
-  const clientSubject = "Спасибо за заявку в ТеплоВместе";
+  const clientSubject = renderTemplate(CLIENT_BOOKING_EMAIL_SUBJECT, buildClientTemplateValues({
+    ...context,
+    booking: bookingWithMeta
+  }));
   const clientBody = composeClientBookingBody({
     ...context,
     booking: bookingWithMeta
