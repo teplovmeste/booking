@@ -3,7 +3,7 @@ import path from "node:path";
 export const APP_PORT = Number(process.env.PORT || 3000);
 export const BASE_PATH = normalizeBasePath(process.env.BASE_PATH || "");
 export const APP_TIMEZONE = "Europe/Moscow";
-export const SLOT_DURATION_MINUTES = 50;
+export const SLOT_DURATION_MINUTES = 55;
 export const SLOT_STEP_MINUTES = 60;
 export const BOOKING_CUTOFF_HOURS = 24;
 export const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@teplovmeste.com";

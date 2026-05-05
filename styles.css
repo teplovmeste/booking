@@ -96,6 +96,36 @@ img {
   text-align: center;
 }
 
+.price-note {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 560px);
+  padding: 14px 18px;
+  border: 1px solid rgba(253, 177, 63, 0.28);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 214, 153, 0.2);
+}
+
+.price-note__label,
+.price-note__value {
+  margin: 0;
+}
+
+.price-note__label {
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.price-note__value {
+  color: var(--text);
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .brand-link {
   display: inline-flex;
   align-items: center;
